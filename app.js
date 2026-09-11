@@ -63,8 +63,59 @@ const PRELIM_LANE_PRIORITY_6 = [4, 5, 3, 2, 1, 6];
 // 決賽道次順序配置（6 道：依成績優先排入 4、5、6、3、2、1 道）
 const FINALS_LANE_PRIORITY_6 = [4, 5, 6, 3, 2, 1];
 
+// 年度設定輔助存取函式（自 config.js 集中讀取）
+function getSchoolName() {
+  return (typeof CONFIG !== "undefined" && CONFIG.SCHOOL_NAME) || "新竹市香山區大庄國民小學";
+}
+function getShortSchoolName() {
+  return (typeof CONFIG !== "undefined" && CONFIG.SHORT_SCHOOL_NAME) || "大庄國小";
+}
+function getAnniversary() {
+  return (typeof CONFIG !== "undefined" && CONFIG.ANNIVERSARY) || "71";
+}
+function getDeadlineDate() {
+  return (typeof CONFIG !== "undefined" && CONFIG.DEADLINE_DATE) || "115年10月12日(一)";
+}
+function getDefaultCompDate() {
+  return (typeof CONFIG !== "undefined" && CONFIG.DEFAULT_COMP_DATE) || "115.11.11";
+}
+
+// 自動將 config.js 集中設定同步套用至網頁所有抬頭、標題與預設日期
+function applyYearConfig() {
+  const school = getSchoolName();
+  const shortSchool = getShortSchoolName();
+  const year = getAnniversary();
+  const deadline = getDeadlineDate();
+  const compDate = getDefaultCompDate();
+
+  // 1. 瀏覽器標籤頁標題
+  document.title = `${school} ${year} 週年校慶運動競賽報名系統`;
+
+  // 2. 前台頂部導覽列大標題
+  const brandH1 = document.querySelector("#teacherNavContainer .brand h1");
+  if (brandH1) brandH1.textContent = `${shortSchool} ${year} 週年校慶運動競賽`;
+
+  // 3. 報名表抬頭與大標題
+  const schoolTitleEl = document.querySelector(".school-name");
+  if (schoolTitleEl) schoolTitleEl.textContent = school;
+
+  const eventTitleEl = document.querySelector(".event-title");
+  if (eventTitleEl) eventTitleEl.textContent = `${year} 週年校慶運動競賽報名表`;
+
+  // 4. 截止日期提示
+  const deadlineEl = document.querySelector(".deadline-date");
+  if (deadlineEl) deadlineEl.textContent = deadline;
+
+  // 5. 比賽預設日期輸入框
+  const dateInput = document.getElementById("competitionDateInput");
+  if (dateInput && (!dateInput.value || dateInput.value === "115.11.11")) {
+    dateInput.value = compDate;
+  }
+}
+
 // DOM 載入後初始化
 document.addEventListener("DOMContentLoaded", () => {
+  applyYearConfig();
   initTabs();
   initRoleAndModal();
   initPublicViews();
@@ -79,6 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderPublicRegistrationTable();
   renderPublicNoticeView();
   updatePublishControlUI();
+  loadRegistrationsFromCloud();
 });
 
 // 分頁切換（同時支援前台選單與後台選單）
@@ -494,8 +546,8 @@ function initDynamicRegistrationForm() {
     syncClassFormLockState(val);
   });
 
-  // 送出整份報名表（若班級重複報名，自動覆蓋該班舊資料；送出後自動鎖定該班級）
-  btnSubmit.addEventListener("click", () => {
+  // 送出整份報名表（若班級重複報名，自動覆蓋該班舊資料；送出後自動同步寫入 Google 試算表並鎖定）
+  btnSubmit.addEventListener("click", async () => {
     const selectedClass = classSelect.value;
     if (!selectedClass) {
       alert("請先於上方選擇報名班級！");
@@ -527,32 +579,78 @@ function initDynamicRegistrationForm() {
       return;
     }
 
-    // 核心功能：檢查班級是否重複報名
     const prevCount = state.registrations.filter(r => r.className === selectedClass).length;
     const isOverwriting = prevCount > 0;
 
-    if (isOverwriting) {
-      // 覆蓋機制：先移除該班級原有的全部舊資料
+    // 提示並開始寫入雲端
+    btnSubmit.disabled = true;
+    const originalBtnText = btnSubmit.innerText;
+    btnSubmit.innerText = "⏳ 正在寫入 Google 試算表...";
+    showStatus(`⏳ 正在將【${selectedClass}】報名資料即時寫入 Google 試算表...`, "info");
+
+    try {
+      const res = await fetch(CONFIG.GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "register",
+          items: newAthletes
+        })
+      });
+      const json = await res.json();
+
+      if (json.status === "success") {
+        // 覆蓋本地資料
+        state.registrations = state.registrations.filter(r => r.className !== selectedClass);
+        state.registrations.push(...newAthletes);
+
+        if (!state.lockedClasses) state.lockedClasses = {};
+        state.lockedClasses[selectedClass] = true;
+
+        renderRegistrationTable();
+        renderPublicRegistrationTable();
+        updateSeedingEventFilter();
+        renderClassLockControlUI();
+        syncClassFormLockState(selectedClass);
+
+        if (json.spreadsheetUrl) {
+          state.spreadsheetUrl = json.spreadsheetUrl;
+          const link = document.getElementById("cloudSheetLink");
+          if (link) {
+            link.href = json.spreadsheetUrl;
+            link.style.display = "inline-flex";
+          }
+        }
+
+        if (isOverwriting) {
+          showStatus(`🔄 【${selectedClass}】報名資料已成功更新寫入 Google 試算表並自動鎖定保護！`, "success");
+          alert(`🎉 【${selectedClass}】報名資料已成功更新並寫入 Google 試算表！\n\n🛡️ 為避免名單被未授權修改，系統已自動將該班級鎖定為「唯讀」。\n若後續需要再次修改，需洽體育組長於後台解開鎖定。`);
+        } else {
+          showStatus(`🎉 成功將【${selectedClass}】報名表（共 ${newAthletes.length} 位選手）寫入 Google 試算表！名單已自動鎖定保護。`, "success");
+          alert(`🎉 【${selectedClass}】報名資料已成功寫入 Google 試算表（共 ${newAthletes.length} 位選手）！\n\n🛡️ 為避免名單被未授權修改，系統已自動將該班級鎖定為「唯讀」。\n若後續需要修改選手或參考秒數，需洽體育組長於後台解開鎖定。`);
+        }
+      } else {
+        throw new Error(json.message || "雲端寫入回傳狀態異常");
+      }
+    } catch (err) {
+      console.warn("寫入雲端發生錯誤，轉為本機暫存：", err);
+      // 若雲端離線，保留本機資料並告知
       state.registrations = state.registrations.filter(r => r.className !== selectedClass);
-    }
+      state.registrations.push(...newAthletes);
+      if (!state.lockedClasses) state.lockedClasses = {};
+      state.lockedClasses[selectedClass] = true;
 
-    // 存入最新報名資料
-    state.registrations.push(...newAthletes);
-    renderRegistrationTable();
-    updateSeedingEventFilter();
+      renderRegistrationTable();
+      renderPublicRegistrationTable();
+      updateSeedingEventFilter();
+      renderClassLockControlUI();
+      syncClassFormLockState(selectedClass);
 
-    // 自動將此班級鎖定（防竄改）
-    if (!state.lockedClasses) state.lockedClasses = {};
-    state.lockedClasses[selectedClass] = true;
-    syncClassFormLockState(selectedClass);
-    renderClassLockControlUI();
-
-    if (isOverwriting) {
-      showStatus(`🔄 【${selectedClass}】報名資料已成功更新並自動鎖定保護！`, "success");
-      alert(`🎉 【${selectedClass}】報名資料已成功更新並自動鎖定！\n\n🛡️ 為避免名單被未授權修改，系統已自動將該班級鎖定為「唯讀」。\n若後續需要再次修改，需洽體育組長於後台解開鎖定。`);
-    } else {
-      showStatus(`🎉 成功送出【${selectedClass}】報名表（共 ${newAthletes.length} 位選手）！名單已自動鎖定保護。`, "success");
-      alert(`🎉 【${selectedClass}】報名資料已成功送出（共 ${newAthletes.length} 位選手）！\n\n🛡️ 為避免名單被未授權修改，系統已自動將該班級鎖定為「唯讀」。\n若後續需要修改選手或參考秒數，需洽體育組長於後台解開鎖定。`);
+      showStatus(`⚠️ 【${selectedClass}】資料已暫存於本機，但連線雲端遇到問題。請體育組長後續於後台點擊「☁️ 同步至 Google Sheets」。`, "error");
+      alert(`⚠️ 【${selectedClass}】報名資料已暫存於本機！\n但暫時無法連線至 Google 試算表：${err.message || err}\n\n已保留本機紀錄，請稍候洽體育組長於後台點擊「同步至 Google Sheets」。`);
+    } finally {
+      btnSubmit.disabled = false;
+      syncClassFormLockState(selectedClass);
     }
   });
 
@@ -634,16 +732,104 @@ function initDynamicRegistrationForm() {
     showStatus("✅ 已載入 30 位大庄國小官方示範選手（六年級女生 15 人＋男生 15 人，六甲～六戊各 3 人，已自動設為鎖定狀態），可立即前往「跑道智慧編排」分頁執行編排！", "success");
   });
 
-  // 清空名單與所有賽務公告資料按鈕
-  document.getElementById("btnClearReg").addEventListener("click", () => {
-    if (confirm("確定要清空目前所有名單與賽務資料嗎？\n\n此操作將徹底重置所有分頁的排道分組、預賽成績、決賽名單，並同步清空前台全校名冊與所有大會公告！")) {
+  // 重新從 Google 試算表載入最新報名資料按鈕
+  const btnRefreshCloud = document.getElementById("btnRefreshCloudReg");
+  if (btnRefreshCloud) {
+    btnRefreshCloud.addEventListener("click", () => {
+      loadRegistrationsFromCloud(true);
+    });
+  }
+
+  // 清空名單與所有賽務公告資料按鈕（同步清空 Google Sheets）
+  document.getElementById("btnClearReg").addEventListener("click", async () => {
+    if (confirm("確定要清空目前所有名單與賽務資料嗎？\n\n此操作將同步清空 Google 試算表中的「報名清單」，並徹底重置所有分頁的排道分組、預賽成績、決賽名單與前台公告！")) {
+      showStatus("⏳ 正在清空 Google 試算表與系統所有名冊資料...", "info");
+      try {
+        await fetch(CONFIG.GAS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "clearRegistrations" })
+        });
+      } catch (err) {
+        console.warn("清空雲端試算表時發生錯誤：", err);
+      }
       resetAllSystemData();
-      showStatus("🧹 已徹底清空全校報名名冊、排道分組、預決賽成績與前台所有公告！", "info");
+      showStatus("🧹 已徹底清空 Google 試算表與全校報名名冊、排道分組、預決賽成績與前台所有公告！", "info");
+      alert("🧹 全校報名名冊與 Google 試算表資料已成功徹底清空！");
     }
   });
 
   // 雲端同步
   document.getElementById("btnSyncCloudReg").addEventListener("click", syncRegistrationsToCloud);
+}
+
+// ==========================================
+// 從 Google 試算表雙向自動載入最新報名名單
+// ==========================================
+async function loadRegistrationsFromCloud(showNotify = false) {
+  if (showNotify) {
+    showStatus("🔄 正在連線 Google 試算表獲取最新報名名冊...", "info");
+  }
+
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getRegistrations`);
+    const json = await res.json();
+
+    if (json.status === "success" && Array.isArray(json.data)) {
+      if (json.data.length > 0) {
+        state.registrations = json.data.map((r, idx) => ({
+          id: "cloud-" + (idx + 1) + "-" + (r.className || "") + "-" + (r.name || ""),
+          event: r.event || "100 公尺",
+          category: r.category || "男生組",
+          className: r.className || "",
+          studentNo: r.studentNo ? r.studentNo.toString().padStart(2, "0") : "",
+          name: r.name || "",
+          seedScore: parseFloat(r.seedScore) || 0,
+          notes: r.notes || "",
+          time: r.time || ""
+        }));
+
+        // 將已在雲端試算表有名單的班級自動標記為鎖定保護（防竄改）
+        if (!state.lockedClasses) state.lockedClasses = {};
+        state.registrations.forEach(r => {
+          if (r.className) {
+            state.lockedClasses[r.className] = true;
+          }
+        });
+
+        // 重新渲染畫面
+        renderRegistrationTable();
+        renderPublicRegistrationTable();
+        updateSeedingEventFilter();
+        renderClassLockControlUI();
+        const curCls = document.getElementById("classSelect")?.value;
+        if (curCls) syncClassFormLockState(curCls);
+
+        if (showNotify) {
+          showStatus(`✅ 雲端同步完成！已從 Google 試算表成功載入 ${state.registrations.length} 位選手資料。`, "success");
+        }
+      } else {
+        // 試算表為空（0 筆資料）
+        state.registrations = [];
+        state.lockedClasses = {};
+        renderRegistrationTable();
+        renderPublicRegistrationTable();
+        updateSeedingEventFilter();
+        renderClassLockControlUI();
+        const curCls = document.getElementById("classSelect")?.value;
+        if (curCls) syncClassFormLockState(curCls);
+
+        if (showNotify) {
+          showStatus("ℹ️ Google 試算表目前為清空狀態（尚無班級報名資料）。", "info");
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("自動從 Google 試算表載入資料失敗：", err);
+    if (showNotify) {
+      showStatus("⚠️ 無法連線至 Google 試算表，已維持本機暫存名冊。", "error");
+    }
+  }
 }
 
 // 徹底清空系統所有狀態與前後台畫面
@@ -1153,7 +1339,7 @@ function initSeedingEvents() {
   if (dateInput) {
     dateInput.addEventListener("input", () => {
       const dates = document.querySelectorAll(".notice-date-display");
-      const currentVal = dateInput.value.trim() || "115.11.11";
+      const currentVal = dateInput.value.trim() || getDefaultCompDate();
       dates.forEach(el => el.innerText = currentVal);
     });
   }
@@ -1563,7 +1749,7 @@ function renderPrelimNotice() {
 
   // 取得使用者自訂比賽日期
   const dateInput = document.getElementById("competitionDateInput");
-  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : "115.11.11";
+  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : getDefaultCompDate();
 
   // 依圖片格式：道次欄位由左至右為 第 5 道、第 4 道、第 3 道、第 2 道、第 1 道
   const laneOrder = [];
@@ -1577,7 +1763,7 @@ function renderPrelimNotice() {
   let html = printPages.map(page => `
     <div class="official-print-page">
       <div class="official-header">
-        <div class="official-school-title">新竹市香山區大庄國民小學 71 週年校慶運動競賽參賽名單</div>
+        <div class="official-school-title">${getSchoolName()} ${getAnniversary()} 週年校慶運動競賽參賽名單</div>
       </div>
 
       ${page.groups.map((group, gIdx) => {
@@ -1918,7 +2104,7 @@ function renderPrelimScoreNoticePaper() {
   };
 
   const dateInput = document.getElementById("competitionDateInput");
-  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : "115.11.11";
+  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : getDefaultCompDate();
 
   const laneOrder = [];
   for (let l = laneCount; l >= 1; l--) {
@@ -1931,7 +2117,7 @@ function renderPrelimScoreNoticePaper() {
   let html = printPages.map(page => `
     <div class="official-print-page">
       <div class="official-header">
-        <div class="official-school-title">新竹市香山區大庄國民小學 71 週年校慶運動競賽參賽名單</div>
+        <div class="official-school-title">${getSchoolName()} ${getAnniversary()} 週年校慶運動競賽參賽名單</div>
       </div>
 
       ${page.groups.map((group, gIdx) => {
@@ -2039,7 +2225,7 @@ function renderFinalsRosterNoticePaper() {
   };
 
   const dateInput = document.getElementById("competitionDateInput");
-  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : "115.11.11";
+  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : getDefaultCompDate();
 
   // 決賽 6 道由左至右：第 6 道、第 5 道、第 4 道、第 3 道、第 2 道、第 1 道
   const laneOrder = [6, 5, 4, 3, 2, 1];
@@ -2048,7 +2234,7 @@ function renderFinalsRosterNoticePaper() {
   let html = printPages.map(page => `
     <div class="official-print-page">
       <div class="official-header">
-        <div class="official-school-title">新竹市香山區大庄國民小學 71 週年校慶運動競賽參賽名單</div>
+        <div class="official-school-title">${getSchoolName()} ${getAnniversary()} 週年校慶運動競賽參賽名單</div>
       </div>
 
       ${page.groups.map((group, gIdx) => {
@@ -2113,7 +2299,7 @@ function renderFinalsScoreNoticePaper() {
   };
 
   const dateInput = document.getElementById("competitionDateInput");
-  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : "115.11.11";
+  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : getDefaultCompDate();
 
   const laneOrder = [6, 5, 4, 3, 2, 1];
   const printPages = groupSeededGroupsByGradeAndEvent(state.seededGroups);
@@ -2121,7 +2307,7 @@ function renderFinalsScoreNoticePaper() {
   let html = printPages.map(page => `
     <div class="official-print-page">
       <div class="official-header">
-        <div class="official-school-title">新竹市香山區大庄國民小學 71 週年校慶運動競賽參賽名單</div>
+        <div class="official-school-title">${getSchoolName()} ${getAnniversary()} 週年校慶運動競賽參賽名單</div>
       </div>
 
       ${page.groups.map((group, gIdx) => {
