@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; frame-src 'none'; object-src 'none';">
+  <title>新竹市香山區大庄國民小學 71 週年校慶運動競賽報名系統</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- 頂部標題與前/後台導覽列 -->
+  <header class="navbar no-print">
+    <!-- 教師/全校前台導覽列 -->
+    <div id="teacherNavContainer" class="nav-container">
+      <div class="brand">
+        <span class="icon">🏃</span>
+        <div>
+          <h1>大庄國小 71 週年校慶運動競賽</h1>
+          <p class="subtitle">班級線上報名 ‧ 參賽名冊檢視 ‧ 賽程與成績即時公告</p>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <button id="btnOpenAdminModal" class="btn btn-gold-sm">
+          🔐 體育組長管理後台
+        </button>
+      </div>
+    </div>
+
+    <!-- 體育組長後台專屬頂部列 (登入後顯示) -->
+    <div id="adminNavContainer" class="nav-container admin-nav-container" style="display: none;">
+      <div class="brand">
+        <span class="icon">👑</span>
+        <div>
+          <h1>體育組長賽務管理控制台</h1>
+          <p class="subtitle">名單審核 ‧ 智慧排道 ‧ 預決賽成績登錄 ‧ 雲端發布</p>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <a id="cloudSheetLink" href="#" target="_blank" class="btn btn-outline" style="display:none;">
+          📊 開啟 Google 試算表
+        </a>
+        <a id="authHelpLink" href="https://script.google.com/d/1lk6hSzpkoOIGUPvgeo-EDdZ1939wj8K365IK1vbKF3GMwzYcvi7SFS_m/edit" target="_blank" class="btn btn-warning-sm" title="若雲端連線需首次授權請點此">
+          🔑 雲端授權
+        </a>
+        <button id="btnExitAdmin" class="btn btn-outline-white">
+          🚪 登出返回前台
+        </button>
+      </div>
+    </div>
+
+    <!-- 前台導覽分頁 (教師端) -->
+    <nav id="teacherTabBar" class="tab-bar">
+      <button class="tab-btn active" data-tab="tab-register">📝 班級線上報名表</button>
+      <button class="tab-btn" data-tab="tab-public-roster">📋 全校報名名單檢視</button>
+      <button class="tab-btn" data-tab="tab-public-notices">📢 大會即時公告與榜單</button>
+    </nav>
+
+    <!-- 後台導覽分頁 (體育組長端，登入後顯示) -->
+    <nav id="adminTabBar" class="tab-bar admin-tab-bar" style="display: none;">
+      <button class="tab-btn active" data-tab="tab-admin-reg">📋 報名資料管理</button>
+      <button class="tab-btn" data-tab="tab-admin-seeding">⚡ 跑道智慧編排</button>
+      <button class="tab-btn" data-tab="tab-admin-prelim">⏱️ 預賽成績登錄與晉級</button>
+      <button class="tab-btn" data-tab="tab-admin-finals">🏁 決賽成績登錄與名次</button>
+    </nav>
+  </header>
+
+  <main class="container">
+
+    <!-- 系統狀態提示 -->
+    <div id="statusBar" class="status-banner info no-print">
+      <span id="statusMessage">系統已就緒，請填寫下方報名表送出。</span>
+    </div>
+
+    <!-- 分頁 1：導師線上報名表（依據指定圖片樣式） -->
+    <section id="tab-register" class="tab-pane active">
+      <div class="paper-card">
+        
+        <!-- 學校與校慶大標題 -->
+        <div class="school-title-area">
+          <h2 class="school-name">新竹市香山區大庄國民小學</h2>
+          <h1 class="event-title">71 週年校慶運動競賽報名表</h1>
+        </div>
+
+        <!-- 班級下拉選單列 -->
+        <div class="class-selector-row">
+          <label class="class-label" for="classSelect">班級 <span class="required-star">*</span></label>
+          <div class="select-wrapper">
+            <select id="classSelect" class="class-dropdown" required>
+              <option value="" disabled selected>請選擇班級</option>
+              <optgroup label="三年級">
+                <option value="三甲">三甲</option>
+                <option value="三乙">三乙</option>
+                <option value="三丙">三丙</option>
+                <option value="三丁">三丁</option>
+                <option value="三戊">三戊</option>
+              </optgroup>
+              <optgroup label="四年級">
+                <option value="四甲">四甲</option>
+                <option value="四乙">四乙</option>
+                <option value="四丙">四丙</option>
+                <option value="四丁">四丁</option>
+                <option value="四戊">四戊</option>
+              </optgroup>
+              <optgroup label="五年級">
+                <option value="五甲">五甲</option>
+                <option value="五乙">五乙</option>
+                <option value="五丙">五丙</option>
+                <option value="五丁">五丁</option>
+                <option value="五戊">五戊</option>
+              </optgroup>
+              <optgroup label="六年級">
+                <option value="六甲">六甲</option>
+                <option value="六乙">六乙</option>
+                <option value="六丙">六丙</option>
+                <option value="六丁">六丁</option>
+                <option value="六戊">六戊</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="grade-indicator" id="gradeIndicator">（請先選擇班級）</div>
+        </div>
+
+        <!-- 班級報名鎖定狀態提示條 -->
+        <div id="classLockNotice" class="class-lock-notice" style="display: none;"></div>
+
+        <!-- 項目 1 區塊 -->
+        <div class="event-section-block">
+          <div class="event-banner">
+            <span class="runner-icon">🏃</span>
+            <span id="event1NameText" class="event-name-text">60 公尺</span>
+          </div>
+
+          <div class="gender-columns-grid">
+            <!-- 男生組 -->
+            <div class="gender-col boys-col">
+              <div class="gender-header boys-header">男生組 (最多 3 名)</div>
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50%;">選手姓名</th>
+                    <th style="width: 50%;">參考成績(秒)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="男生組" data-row="1" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="男生組" data-row="1" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="男生組" data-row="2" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="男生組" data-row="2" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="男生組" data-row="3" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="男生組" data-row="3" placeholder="秒"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 女生組 -->
+            <div class="gender-col girls-col">
+              <div class="gender-header girls-header">女生組 (最多 3 名)</div>
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50%;">選手姓名</th>
+                    <th style="width: 50%;">參考成績(秒)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="女生組" data-row="1" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="女生組" data-row="1" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="女生組" data-row="2" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="女生組" data-row="2" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="1" data-gender="女生組" data-row="3" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="1" data-gender="女生組" data-row="3" placeholder="秒"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 項目 2 區塊 -->
+        <div class="event-section-block">
+          <div class="event-banner">
+            <span class="runner-icon">🏃</span>
+            <span id="event2NameText" class="event-name-text">100 公尺</span>
+          </div>
+
+          <div class="gender-columns-grid">
+            <!-- 男生組 -->
+            <div class="gender-col boys-col">
+              <div class="gender-header boys-header">男生組 (最多 3 名)</div>
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50%;">選手姓名</th>
+                    <th style="width: 50%;">參考成績(秒)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="男生組" data-row="1" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="男生組" data-row="1" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="男生組" data-row="2" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="男生組" data-row="2" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="男生組" data-row="3" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="男生組" data-row="3" placeholder="秒"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 女生組 -->
+            <div class="gender-col girls-col">
+              <div class="gender-header girls-header">女生組 (最多 3 名)</div>
+              <table class="roster-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50%;">選手姓名</th>
+                    <th style="width: 50%;">參考成績(秒)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="女生組" data-row="1" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="女生組" data-row="1" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="女生組" data-row="2" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="女生組" data-row="2" placeholder="秒"></td>
+                  </tr>
+                  <tr>
+                    <td><input type="text" class="input-name" data-event-slot="2" data-gender="女生組" data-row="3" placeholder="姓名"></td>
+                    <td><input type="number" step="0.01" class="input-score" data-event-slot="2" data-gender="女生組" data-row="3" placeholder="秒"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 截止交件提醒紅色橫條 -->
+        <div class="deadline-banner">
+          競賽報名表請於<span class="deadline-date">115年10月12日(一)</span>前完成報名
+        </div>
+
+        <!-- 送出報名表大按鈕 -->
+        <div class="submit-btn-wrapper">
+          <button type="button" id="btnSubmitRoster" class="btn-submit-roster">送出報名表</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 分頁 2：全校報名名單檢視 (教師與全校唯讀端) -->
+    <section id="tab-public-roster" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header" style="flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3 style="margin-bottom: 0.2rem;">📋 全校已報名選手名冊檢視</h3>
+            <p class="text-muted" style="font-size: 0.9rem; margin: 0;">供各班導師即時查閱各年級報名狀態與名額 (全校目前共 <span id="publicRegCount">0</span> 人)</p>
+          </div>
+          <div class="header-tools" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <div class="filter-group" style="margin: 0;">
+              <label style="font-size: 0.9rem;">年級篩選：</label>
+              <select id="publicRosterGradeFilter" style="padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: 600;">
+                <option value="ALL">全部年級</option>
+                <option value="三年級">三年級</option>
+                <option value="四年級">四年級</option>
+                <option value="五年級">五年級</option>
+                <option value="六年級">六年級</option>
+              </select>
+            </div>
+            <div class="filter-group" style="margin: 0;">
+              <label style="font-size: 0.9rem;">項目篩選：</label>
+              <select id="publicRosterEventFilter" style="padding: 0.35rem 0.6rem; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: 600;">
+                <option value="ALL">全部項目</option>
+                <option value="60公尺">60 公尺</option>
+                <option value="100公尺">100 公尺</option>
+                <option value="200公尺">200 公尺</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="styled-table" id="publicRegTable">
+              <thead>
+                <tr>
+                  <th style="width: 8%;">#</th>
+                  <th style="width: 15%;">班級</th>
+                  <th style="width: 20%;">競賽項目</th>
+                  <th style="width: 17%;">組別</th>
+                  <th style="width: 22%;">選手姓名</th>
+                  <th style="width: 18%;">參考成績</th>
+                </tr>
+              </thead>
+              <tbody id="publicRegTableBody">
+                <tr><td colspan="6" class="text-center text-muted">目前尚無報名資料，請導師於「班級線上報名表」填寫送出。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 分頁 3：大會即時公告與榜單 (教師與全校唯讀端) -->
+    <section id="tab-public-notices" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header">
+          <div>
+            <h2 style="margin-bottom: 0.2rem;">📢 大會官方賽程與成績公告看板</h2>
+            <p class="text-muted" style="font-size: 0.92rem; margin: 0;">全校師生可在此即時查閱各項目最新官方公告名冊與完賽榜單，並支援直接列印。</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- 公告分類按鈕列 -->
+          <div class="public-notice-nav">
+            <button class="public-notice-pill active" data-notice-type="prelim-roster">📜 預賽分組參賽名冊</button>
+            <button class="public-notice-pill" data-notice-type="prelim-score">⏱️ 預賽完賽成績公告 (含●晉級)</button>
+            <button class="public-notice-pill" data-notice-type="finals-roster">📜 決賽分組參賽名冊</button>
+            <button class="public-notice-pill" data-notice-type="finals-score">🏆 決賽完賽成績公告 (含圈圈名次)</button>
+          </div>
+
+          <div class="toolbar mt-3" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+            <div id="publicNoticeInfoText" style="font-weight: 700; color: #1e3a8a; font-size: 1.05rem;">
+              📜 目前瀏覽：【預賽分組參賽名冊】
+            </div>
+            <button id="btnPrintCurrentPublicNotice" class="btn btn-primary">
+              🖨️ 列印此份公告 (A4 官方格式)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 公告內容動態展示容器 -->
+      <div id="publicNoticeViewContainer" class="mt-4">
+        <!-- 預設由 JS 渲染對應的紙張內容 -->
+      </div>
+    </section>
+
+    <!-- ==================== 體育組長賽務管理後台專屬分頁 ==================== -->
+
+    <!-- 後台分頁 1：報名資料管理 (體育組長專屬) -->
+    <section id="tab-admin-reg" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header">
+          <h3>📋 全校已報名選手總清單 (<span id="regCount">0</span> 人)</h3>
+          <div class="header-tools">
+            <button id="btnSampleData" class="btn btn-secondary-sm">⚡ 載入六個班級示範選手</button>
+            <button id="btnSyncCloudReg" class="btn btn-primary-sm">☁️ 同步至 Google Sheets</button>
+            <button id="btnClearReg" class="btn btn-danger-sm">清空名單</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="styled-table" id="regTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>班級</th>
+                  <th>項目</th>
+                  <th>組別</th>
+                  <th>選手姓名</th>
+                  <th>參考成績</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="regTableBody">
+                <tr><td colspan="7" class="text-center text-muted">目前尚無報名資料，請於上方填寫報名表送出。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 班級報名鎖定管理卡片 (防止各班隨意修改，需體育組長解鎖) -->
+      <div class="card no-print mt-4" id="adminClassLockCard">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+          <div>
+            <h3 style="margin-bottom: 0.2rem;">🔒 各班級報名狀態與防竄改鎖定管理</h3>
+            <p class="text-muted" style="font-size: 0.88rem; margin: 0;">班級送出報名表後自動鎖定為唯讀。如導師需修改，請由體育組長在此解開鎖定；導師重新送出後將自動重新上鎖。</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button id="btnLockAllClasses" class="btn btn-secondary-sm">🔒 全部鎖定</button>
+            <button id="btnUnlockAllClasses" class="btn btn-secondary-sm">🔓 全部解鎖</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="classLockListContainer" class="class-lock-grid">
+            <!-- 動態產生各年級各班級鎖定狀態與切換按鈕 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 後台分頁 2：跑道智慧編排 -->
+    <section id="tab-admin-seeding" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header">
+          <h2>⚡ 跑道智慧編排（反向蛇形 + 同班迴避 + 優勢道次）</h2>
+        </div>
+        <div class="card-body">
+          <div class="rules-box">
+            <h4>📌 系統執行三大編排核心規範：</h4>
+            <ol>
+              <li><strong>同班迴避原則</strong>：同一班級之選手，系統自動分散，絕不分配在同一組。</li>
+              <li><strong>反向蛇形編排法 (Serpentine Seeding)</strong>：排序依序從<strong>第 3 組開始倒排到第 1 組</strong>（$G_3 \rightarrow G_2 \rightarrow G_1 \rightarrow G_1 \rightarrow G_2 \rightarrow G_3 \dots$）。</li>
+              <li><strong>預賽 5 道優勢道次配置</strong>：預賽每組編排 1～5 道，各組成績最優者，道次依序為 <strong>第 4 道（最優） ➔ 第 5 道 ➔ 第 3 道 ➔ 第 2 道 ➔ 第 1 道</strong>。</li>
+            </ol>
+          </div>
+
+          <div class="toolbar mt-3">
+            <div class="filter-group">
+              <label>篩選項目：</label>
+              <select id="seedingEventFilter">
+                <option value="ALL">全部項目</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>分組組數：</label>
+              <select id="seedingHeatCount">
+                <option value="3" selected>3 組 (標準反向蛇形)</option>
+                <option value="2">2 組</option>
+                <option value="4">4 組</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>預賽道次：</label>
+              <select id="seedingLaneCount">
+                <option value="5" selected>5 道 (1～5道：優先序 4, 5, 3, 2, 1)</option>
+                <option value="6">6 道 (1～6道：優先序 4, 5, 3, 2, 1, 6)</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>比賽日期：</label>
+              <input type="text" id="competitionDateInput" value="115.11.11" placeholder="例 115.11.11" style="width: 110px; padding: 0.45rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: 600; font-size: 0.92rem;">
+            </div>
+            <button id="btnRunSeeding" class="btn btn-success">🚀 執行反向蛇形編排</button>
+            <button id="btnSaveSeedingCloud" class="btn btn-primary" style="display:none;">☁️ 儲存分組至 Google 試算表</button>
+            <button id="btnPrintPrelimNotice" class="btn btn-outline">🖨️ 列印預賽分組參賽名冊</button>
+            <div class="publish-control-group">
+              <button id="btnPublishPrelimRoster" class="btn btn-publish">📢 公告預賽名單至前台</button>
+              <button id="btnUnpublishPrelimRoster" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回名單公告</button>
+              <span id="badgePrelimRosterPublish" class="publish-status-badge unpublished">⚪ 前台未公告</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 預賽編排結果公告展示區 (100% 依據大庄國小參賽名單公文圖片格式：空白手寫成績欄) -->
+      <div id="prelimNoticeArea" class="official-roster-paper mt-4">
+        <div id="heatsContainer">
+          <div class="empty-state no-print">請點擊上方「🚀 執行反向蛇形編排」按鈕產出公告名單。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 後台分頁 3：預賽成績登錄與晉級判定 -->
+    <section id="tab-admin-prelim" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header">
+          <h2>⏱️ 預賽完賽成績登錄與決賽晉級判定</h2>
+          <div class="header-tools">
+            <button id="btnFillSamplePrelimScores" class="btn btn-secondary-sm">⚡ 填入示範預賽成績 (測試用)</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">請在下方各組 1～5 道中輸入選手預賽完賽秒數（或填入『未出賽』），輸入完成後點擊「🎯 判定晉級並產出預賽成績公告」。系統將動態計算各組名次並產出官方格式預賽完賽成績公告與決賽名單。</p>
+          <div class="qualify-rules-bar">
+            <span><strong>晉級規則：</strong> 各組第 <strong>1</strong> 名直接晉級 (大 Q) ＋ 擇優前 <strong>3</strong> 名 (小 q)，共 <strong>6</strong> 人晉級決賽。</span>
+            <button id="btnCalculateQualifiers" class="btn btn-warning">🎯 判定晉級並產出預賽成績公告</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 各組成績登錄表格 (僅在螢幕上登錄，列印時不顯示) -->
+      <div id="prelimScoreInputArea" class="mt-4 no-print">
+        <div class="empty-state" id="prelimScoreEmpty">尚未產生預賽排道，請先至「跑道智慧編排」分頁執行編排。</div>
+      </div>
+
+      <!-- 完賽成績與晉級公告專區（輸入完預賽成績並判定後顯示） -->
+      <div id="prelimScoreNoticeSection" class="mt-4" style="display:none;">
+        <div class="toolbar no-print mb-3" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: space-between; background: #fff; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #1e3a8a; font-size: 1.05rem;">
+            📢 預賽完賽成績公告與決賽名單已完成產出！
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button id="btnPrintPrelimScoreNoticeFromTab3" class="btn btn-warning">🖨️ 列印預賽完賽成績公告 (含●晉級)</button>
+            <button id="btnPrintFinalsNotice" class="btn btn-outline">🖨️ 列印決賽分組參賽名冊</button>
+            <div class="publish-control-group">
+              <button id="btnPublishPrelimScore" class="btn btn-publish">📢 公告預賽成績與決賽名冊至前台</button>
+              <button id="btnUnpublishPrelimScore" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回預賽成績公告</button>
+              <span id="badgePrelimScorePublish" class="publish-status-badge unpublished">⚪ 前台未公告</span>
+            </div>
+            <button id="btnGoToFinalsTab" class="btn btn-primary">進入決賽成績登錄 ➔</button>
+          </div>
+        </div>
+
+        <!-- 官方格式預賽完賽成績公告紙張 (100% 大庄國小官方公文圖片格式：含●晉級符號與附註) -->
+        <div id="prelimScoreNoticePaper" class="official-roster-paper mb-4">
+        </div>
+
+        <!-- 官方格式決賽參賽名單公告紙張 (100% 依預賽名單公文格式：決賽 6 道、手寫留白成績欄) -->
+        <div id="finalsNoticeArea" class="mt-4">
+          <div class="card-header no-print" style="margin-bottom: 0.5rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.6rem 1rem;">
+            <strong>📜 決賽分組參賽名冊（依預賽名單公文格式，留白成績欄）</strong>
+          </div>
+          <div id="finalsRosterNoticePaper" class="official-roster-paper mb-4">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 後台分頁 4：決賽成績登錄與名次判定（取消積分制度） -->
+    <section id="tab-admin-finals" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header">
+          <h2>🏁 決賽最終成績登錄與決賽成績公告產出</h2>
+          <div class="header-tools">
+            <button id="btnFillSampleFinalScores" class="btn btn-secondary-sm">⚡ 填入示範決賽成績 (測試用)</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">請在下方各跑道輸入選手決賽完賽秒數（或填入『未出賽』），系統將排定第 1 名至第 6 名名次，並以官方公文格式產出決賽完賽成績公告（成績前標註圈圈名次 ①～⑥，已取消積分制度）。</p>
+          <div class="toolbar">
+            <button id="btnCalculateFinalsRanks" class="btn btn-warning">🏁 計算決賽名次並產出決賽成績公告</button>
+            <button id="btnPrintFinalsScoreNotice" class="btn btn-success" style="display:none;">🖨️ 列印決賽完賽成績公告 (含圈圈名次)</button>
+            <button id="btnExportFinalsCloud" class="btn btn-primary">☁️ 儲存決賽名次至 Google 試算表</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 各組決賽成績登錄表格 (螢幕操作) -->
+      <div id="finalsScoreInputArea" class="mt-4 no-print">
+        <div class="empty-state" id="finalsScoreEmpty">尚未產生決賽名單，請先至「預賽成績」分頁完成晉級判定。</div>
+      </div>
+
+      <!-- 完賽公告專區（官方格式決賽完賽成績公告紙張：成績前帶圈圈外框名次 ①～⑥，無積分） -->
+      <div id="finalsScoreNoticeSection" class="mt-4" style="display:none;">
+        <div class="toolbar no-print mb-3" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; justify-content: space-between; background: #fff; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <div style="font-weight: 700; color: #1e3a8a; font-size: 1.05rem;">
+            📢 決賽完賽成績公告已完成產出！
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button id="btnPrintFinalsScoreNoticeBtn2" class="btn btn-success">🖨️ 列印決賽完賽成績公告 (含圈圈名次)</button>
+            <div class="publish-control-group">
+              <button id="btnPublishFinalsScore" class="btn btn-publish">📢 公告決賽成績公告至前台</button>
+              <button id="btnUnpublishFinalsScore" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回決賽公告</button>
+              <span id="badgeFinalsScorePublish" class="publish-status-badge unpublished">⚪ 前台未公告</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="finalsScoreNoticePaper" class="official-roster-paper mb-4">
+        </div>
+
+        <!-- 決賽名次總表（純名次排序，無積分） -->
+        <div id="finalsRankSummaryArea" class="card no-print mt-4">
+          <div class="card-header">
+            <h3>📋 決賽名次結果總覽（純名次排序，無積分制度）</h3>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="styled-table" id="finalsResultTable">
+                <thead>
+                  <tr>
+                    <th>名次</th>
+                    <th>決賽道次</th>
+                    <th>班級</th>
+                    <th>姓名</th>
+                    <th>決賽成績 (秒)</th>
+                    <th>預賽秒數</th>
+                    <th>獎項</th>
+                  </tr>
+                </thead>
+                <tbody id="finalsResultTableBody">
+                  <tr><td colspan="7" class="text-center text-muted">尚未計算決賽名次，請在上方輸入成績後點擊「🏁 計算決賽名次並產出決賽成績公告」。</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 體育組長後台登入彈窗 (Modal) -->
+  <div id="adminLoginModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">🔐</span>
+          <h3>體育組長賽務後台登入</h3>
+        </div>
+        <button id="btnCloseAdminModal" class="modal-close-btn" title="關閉">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">此區域僅限學務處體育組長進行賽程智慧排道、成績登錄與雲端發布作業。</p>
+        <div class="form-group mt-3">
+          <label for="adminPasswordInput"><strong>請輸入管理者密碼：</strong></label>
+          <input type="password" id="adminPasswordInput" class="form-control admin-pwd-input" placeholder="請輸入管理員密碼" autocomplete="off">
+          <div class="password-hint">※ 此區域限學務處體育組長登入，教師請留在前台。</div>
+        </div>
+        <div id="adminLoginError" class="login-error-msg" style="display: none;">
+          ⚠️ 密碼不正確，請重新輸入！
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-actions" style="width: 100%; display: flex; justify-content: flex-end; gap: 0.5rem;">
+          <button id="btnCancelAdminModal" class="btn btn-outline">取消</button>
+          <button id="btnConfirmAdminLogin" class="btn btn-primary">登入管理後台</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
