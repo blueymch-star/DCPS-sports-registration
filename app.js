@@ -740,22 +740,22 @@ function initDynamicRegistrationForm() {
     });
   }
 
-  // 清空名單與所有賽務公告資料按鈕（同步清空 Google Sheets）
+  // 清空名單與所有賽務公告資料按鈕（同步徹底清空 Google Sheets 所有工作表）
   document.getElementById("btnClearReg").addEventListener("click", async () => {
-    if (confirm("確定要清空目前所有名單與賽務資料嗎？\n\n此操作將同步清空 Google 試算表中的「報名清單」，並徹底重置所有分頁的排道分組、預賽成績、決賽名單與前台公告！")) {
-      showStatus("⏳ 正在清空 Google 試算表與系統所有名冊資料...", "info");
+    if (confirm("確定要徹底清空目前所有名單與賽務資料嗎？\n\n此操作將同步徹底清空 Google 試算表中的所有工作表（包含【報名清單】、【預賽分組與道次】、【成績總榜】），並重置前後台所有分頁的排道分組、預決賽成績與公告！")) {
+      showStatus("⏳ 正在徹底清空 Google 試算表與系統所有名冊資料...", "info");
       try {
         await fetch(CONFIG.GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "clearRegistrations" })
+          body: JSON.stringify({ action: "clearAll" })
         });
       } catch (err) {
         console.warn("清空雲端試算表時發生錯誤：", err);
       }
       resetAllSystemData();
-      showStatus("🧹 已徹底清空 Google 試算表與全校報名名冊、排道分組、預決賽成績與前台所有公告！", "info");
-      alert("🧹 全校報名名冊與 Google 試算表資料已成功徹底清空！");
+      showStatus("🧹 已徹底清空 Google 試算表所有分頁（報名清單、預賽分組道次、成績總榜）與系統所有公告！", "info");
+      alert("🧹 全校報名名冊、預賽分組道次與 Google 試算表已成功徹底清空！");
     }
   });
 
