@@ -1562,3 +1562,82 @@ a[href*="netlify.com"] {
   clip: rect(0, 0, 0, 0) !important;
 }
 
+/* 賽務文件與獎狀下載中心 */
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.export-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.export-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.export-card.highlight {
+  border: 2px solid #f59e0b;
+  background: #fffdfa;
+}
+
+.export-card-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: #1e40af;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.export-card-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.export-card h4 {
+  font-size: 1.15rem;
+  color: #1e3a8a;
+  margin-bottom: 0.5rem;
+}
+
+.export-card-desc {
+  font-size: 0.88rem;
+  color: #64748b;
+  line-height: 1.5;
+  flex: 1;
+  margin-bottom: 0.75rem;
+}
+
+.export-card-meta {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+
+.export-card-actions {
+  margin-top: auto;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+

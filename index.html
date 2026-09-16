@@ -65,6 +65,7 @@
       <button class="tab-btn" data-tab="tab-admin-seeding">⚡ 跑道智慧編排</button>
       <button class="tab-btn" data-tab="tab-admin-prelim">⏱️ 預賽成績登錄與晉級</button>
       <button class="tab-btn" data-tab="tab-admin-finals">🏁 決賽成績登錄與名次</button>
+      <button class="tab-btn" data-tab="tab-admin-export">📥 賽務公文與獎狀下載</button>
     </nav>
   </header>
 
@@ -456,6 +457,7 @@
             <button id="btnRunSeeding" class="btn btn-success">🚀 執行反向蛇形編排</button>
             <button id="btnSaveSeedingCloud" class="btn btn-primary" style="display:none;">☁️ 儲存分組至 Google 試算表</button>
             <button id="btnPrintPrelimNotice" class="btn btn-outline">🖨️ 列印預賽分組參賽名冊</button>
+            <button type="button" id="btnDownloadStage1Word" class="btn btn-primary-sm" onclick="downloadStage1PrelimRosterWord()" title="下載符合大庄國小官方格式之預賽名單 Word 檔 (成績欄空白)">📥 下載預賽名單 Word (空白成績)</button>
             <div class="publish-control-group">
               <button id="btnPublishPrelimRoster" class="btn btn-publish">📢 公告預賽名單至前台</button>
               <button id="btnUnpublishPrelimRoster" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回名單公告</button>
@@ -505,6 +507,8 @@
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
             <button id="btnPrintPrelimScoreNoticeFromTab3" class="btn btn-warning">🖨️ 列印預賽完賽成績公告 (含●晉級)</button>
             <button id="btnPrintFinalsNotice" class="btn btn-outline">🖨️ 列印決賽分組參賽名冊</button>
+            <button type="button" id="btnDownloadStage2Word" class="btn btn-warning-sm" onclick="downloadStage2PrelimResultsWord()" title="下載含預賽完賽成績之預賽名單 Word 檔">📥 下載預賽成績 Word</button>
+            <button type="button" id="btnDownloadStage3Word" class="btn btn-primary-sm" onclick="downloadStage3FinalsRosterWord()" title="下載已編排決賽賽道之決賽名單 Word 檔 (成績空白)">📥 下載決賽名單 Word</button>
             <div class="publish-control-group">
               <button id="btnPublishPrelimScore" class="btn btn-publish">📢 公告預賽成績與決賽名冊至前台</button>
               <button id="btnUnpublishPrelimScore" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回預賽成績公告</button>
@@ -543,6 +547,8 @@
           <div class="toolbar">
             <button id="btnCalculateFinalsRanks" class="btn btn-warning">🏁 計算決賽名次並產出決賽成績公告</button>
             <button id="btnPrintFinalsScoreNotice" class="btn btn-success" style="display:none;">🖨️ 列印決賽完賽成績公告 (含圈圈名次)</button>
+            <button type="button" id="btnDownloadStage4Word" class="btn btn-success-sm" onclick="downloadStage4FinalsResultsWord()" title="下載含決賽完賽成績之決賽名單 Word 檔">📥 下載決賽成績 Word</button>
+            <button type="button" id="btnDownloadStage5Excel" class="btn btn-gold-sm" onclick="downloadStage5CertificatesExcel()" title="下載符合獎狀合併列印格式之 Excel 檔 (96 筆得獎紀錄)">📥 下載獎狀合併列印 Excel</button>
             <button id="btnExportFinalsCloud" class="btn btn-primary">☁️ 儲存決賽名次至 Google 試算表</button>
           </div>
         </div>
@@ -561,6 +567,8 @@
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
             <button id="btnPrintFinalsScoreNoticeBtn2" class="btn btn-success">🖨️ 列印決賽完賽成績公告 (含圈圈名次)</button>
+            <button type="button" class="btn btn-success-sm" onclick="downloadStage4FinalsResultsWord()">📥 下載決賽成績 Word</button>
+            <button type="button" class="btn btn-gold-sm" onclick="downloadStage5CertificatesExcel()">📥 下載獎狀 Excel</button>
             <div class="publish-control-group">
               <button id="btnPublishFinalsScore" class="btn btn-publish">📢 公告決賽成績公告至前台</button>
               <button id="btnUnpublishFinalsScore" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回決賽公告</button>
@@ -601,6 +609,98 @@
       </div>
     </section>
 
+    <!-- 後台分頁 5：賽務公文與獎狀下載中心 (體育組長專屬) -->
+    <section id="tab-admin-export" class="tab-pane">
+      <div class="card no-print">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="margin-bottom: 0.2rem;">📥 賽務公文 Word 與獎狀 Excel 一鍵下載中心</h2>
+            <p class="text-muted" style="margin: 0; font-size: 0.92rem;">依據大庄國小 71 週年校慶競賽規格，隨時下載 5 大賽程階段的官方 Word 公文與獎狀套印 Excel 檔。</p>
+          </div>
+          <div>
+            <button type="button" class="btn btn-primary" onclick="downloadAllCompetitionDocsZip()">
+              📦 一鍵打包全套文件 (.ZIP)
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="export-grid">
+            
+            <!-- 階段 1 -->
+            <div class="export-card">
+              <div class="export-card-badge">階段 1</div>
+              <div class="export-card-icon">📝</div>
+              <h4>預賽賽道編排名單</h4>
+              <p class="export-card-desc">預賽賽道編排完畢後產出，全校 16 項比賽 × 3 組（共 48 表格），填妥選手姓名與 1～5 道次，成績欄保留空白供裁判計時。</p>
+              <div class="export-card-meta">格式：Word (.docx) ‧ 48 個組別表格</div>
+              <div class="export-card-actions">
+                <button type="button" class="btn btn-primary-sm w-100" onclick="downloadStage1PrelimRosterWord()">
+                  📥 下載 Word 檔 (空白成績)
+                </button>
+              </div>
+            </div>
+
+            <!-- 階段 2 -->
+            <div class="export-card">
+              <div class="export-card-badge">階段 2</div>
+              <div class="export-card-icon">⏱️</div>
+              <h4>預賽完賽成績名單</h4>
+              <p class="export-card-desc">預賽成績登錄完畢後產出，包含各組選手預賽完賽秒數與未出賽註記，供大會存檔與備查。</p>
+              <div class="export-card-meta">格式：Word (.docx) ‧ 48 個組別表格</div>
+              <div class="export-card-actions">
+                <button type="button" class="btn btn-warning-sm w-100" onclick="downloadStage2PrelimResultsWord()">
+                  📥 下載 Word 檔 (含預賽成績)
+                </button>
+              </div>
+            </div>
+
+            <!-- 階段 3 -->
+            <div class="export-card">
+              <div class="export-card-badge">階段 3</div>
+              <div class="export-card-icon">🏃</div>
+              <h4>決賽賽道編排名單</h4>
+              <p class="export-card-desc">決賽晉級判定完成後產出，全校 16 項比賽決賽名冊（共 16 表格），填妥 6 位晉級決賽選手與跑道，成績欄保留空白。</p>
+              <div class="export-card-meta">格式：Word (.docx) ‧ 16 個決賽表格</div>
+              <div class="export-card-actions">
+                <button type="button" class="btn btn-primary-sm w-100" onclick="downloadStage3FinalsRosterWord()">
+                  📥 下載 Word 檔 (空白成績)
+                </button>
+              </div>
+            </div>
+
+            <!-- 階段 4 -->
+            <div class="export-card">
+              <div class="export-card-badge">階段 4</div>
+              <div class="export-card-icon">🏆</div>
+              <h4>決賽完賽成績名單</h4>
+              <p class="export-card-desc">決賽成績登錄完畢後產出，全校 16 項決賽選手正式秒數記錄，供大會正式存檔。</p>
+              <div class="export-card-meta">格式：Word (.docx) ‧ 16 個決賽表格</div>
+              <div class="export-card-actions">
+                <button type="button" class="btn btn-success-sm w-100" onclick="downloadStage4FinalsResultsWord()">
+                  📥 下載 Word 檔 (含決賽成績)
+                </button>
+              </div>
+            </div>
+
+            <!-- 階段 5 -->
+            <div class="export-card highlight">
+              <div class="export-card-badge" style="background: #b45309;">階段 5</div>
+              <div class="export-card-icon">📜</div>
+              <h4>獎狀合併列印名冊</h4>
+              <p class="export-card-desc">決賽成績統整完畢後產出，全校 16 項比賽 × 第 1 至第 6 名（共 96 筆得獎紀錄），符合獎狀套印格式。</p>
+              <div class="export-card-meta">格式：Excel (.xlsx) ‧ 96 筆獎狀資料</div>
+              <div class="export-card-actions">
+                <button type="button" class="btn btn-gold-sm w-100" onclick="downloadStage5CertificatesExcel()">
+                  📥 下載 Excel 檔 (96 筆得獎)
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- 體育組長後台登入彈窗 (Modal) -->
@@ -633,7 +733,10 @@
     </div>
   </div>
 
+  <script src="libs/jszip.min.js"></script>
+  <script src="libs/xlsx.full.min.js"></script>
   <script src="config.js"></script>
+  <script src="exportDocs.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
