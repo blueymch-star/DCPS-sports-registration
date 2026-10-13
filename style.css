@@ -696,6 +696,17 @@ body {
   letter-spacing: 1px;
 }
 
+.official-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 0.65rem;
+}
+
+.mobile-scroll-hint {
+  display: none;
+}
+
 .official-seeding-table {
   width: 100%;
   border-collapse: collapse;
@@ -936,7 +947,21 @@ body {
     padding: 0 !important;
     margin: 0 !important;
     max-width: 100% !important;
+    overflow: visible !important;
     font-family: "DFKai-SB", "BiauKai", "Kaiti", "PMingLiU", "MingLiU", serif !important;
+  }
+
+  .official-table-wrapper {
+    overflow: visible !important;
+    width: 100% !important;
+    margin-bottom: 8px !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-scroll-hint {
+    display: none !important;
   }
 
   .official-print-page {
@@ -1100,13 +1125,134 @@ body {
   }
 }
 
-/* 響應式微調 */
+/* ===================================================
+   行動裝置響應式樣式優化 (手機端畫面 100% 完整適應)
+   =================================================== */
 @media (max-width: 768px) {
-  .paper-card { padding: 1.5rem 1rem; }
-  .gender-columns-grid { grid-template-columns: 1fr; gap: 1.5rem; }
-  .school-name { font-size: 1.3rem; }
-  .event-title { font-size: 1.45rem; }
-  .official-roster-paper { padding: 1rem 0.5rem; }
+  .container {
+    padding: 0 0.65rem !important;
+    margin: 0.75rem auto !important;
+  }
+
+  .paper-card {
+    padding: 1.25rem 0.75rem !important;
+  }
+
+  .gender-columns-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .school-name {
+    font-size: 1.2rem;
+  }
+
+  .event-title {
+    font-size: 1.35rem;
+  }
+
+  /* 官方公告紙張在手機端自適應 */
+  .official-roster-paper {
+    padding: 1.2rem 0.65rem !important;
+    margin: 0.6rem auto !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+    overflow-x: hidden !important;
+  }
+
+  /* 官方公文抬頭在手機端允許折行並自適應縮放，徹底避免文字被裁切 */
+  .official-school-title {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    line-height: 1.4 !important;
+    text-align: center !important;
+    margin-bottom: 0.45rem !important;
+    padding: 0 0.2rem !important;
+  }
+
+  /* 副標題（組別與日期）自適應排版 */
+  .official-sub-bar {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 0.4rem !important;
+    font-size: 0.95rem !important;
+    flex-wrap: wrap !important;
+    margin-bottom: 0.4rem !important;
+    padding: 0 0.1rem !important;
+  }
+
+  .sub-title-left {
+    font-size: 0.96rem !important;
+    font-weight: 700 !important;
+  }
+
+  .sub-title-right {
+    font-size: 0.88rem !important;
+    color: #334155 !important;
+  }
+
+  /* 表格水平滑動層優化 */
+  .official-table-wrapper {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    margin-bottom: 0.55rem !important;
+    background: #ffffff !important;
+    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  /* 保持道次表格清晰度，允許手機順暢左右滑動查閱所有道次 */
+  .official-seeding-table {
+    min-width: 530px !important;
+    margin-bottom: 0 !important;
+    border: none !important;
+  }
+
+  .official-seeding-table th,
+  .official-seeding-table td {
+    padding: 0.35rem 0.25rem !important;
+    font-size: 0.96rem !important;
+  }
+
+  /* 行動端貼心提示：提示使用者可左右滑動查看所有道次 */
+  .mobile-scroll-hint {
+    display: block !important;
+    font-size: 0.78rem !important;
+    color: #475569 !important;
+    text-align: right !important;
+    margin-bottom: 0.35rem !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-weight: 600 !important;
+  }
+
+  .official-qualify-legend {
+    font-size: 0.88rem !important;
+    margin-top: 0.35rem !important;
+    margin-bottom: 1.1rem !important;
+  }
+
+  /* 公告導覽標籤在手機端更精巧舒適 */
+  .public-notice-pill {
+    padding: 0.45rem 0.85rem !important;
+    font-size: 0.88rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .official-school-title {
+    font-size: 1.05rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .official-sub-bar {
+    font-size: 0.88rem !important;
+  }
 }
 
 /* ==========================================

@@ -2231,33 +2231,36 @@ function buildPrelimNoticeHtml(seededGroups) {
             <span class="sub-title-left">${subTitleText}</span>
             <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="prelim">${groupDate}</span></span>
           </div>
+          <div class="mobile-scroll-hint no-print">↔️ 手機可左右滑動查看完整道次</div>
 
           ${group.heats.map(heat => `
-            <table class="official-seeding-table">
-              <thead>
-                <tr>
-                  <th colspan="2" class="th-lane-title">道　次</th>
-                  ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td rowspan="2" class="heat-label-cell">第 ${heat.heatNum} 組</td>
-                  <td class="row-label-cell">姓名</td>
-                  ${laneOrder.map(laneNum => {
-                    const l = heat.lanes.find(x => x.lane === laneNum);
-                    const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
-                    return `<td class="name-cell">${nameStr}</td>`;
-                  }).join("")}
-                </tr>
-                <tr>
-                  <td class="row-label-cell">成績</td>
-                  ${laneOrder.map(laneNum => {
-                    return `<td class="score-blank-cell">&nbsp;</td>`;
-                  }).join("")}
-                </tr>
-              </tbody>
-            </table>
+            <div class="official-table-wrapper">
+              <table class="official-seeding-table">
+                <thead>
+                  <tr>
+                    <th colspan="2" class="th-lane-title">道　次</th>
+                    ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td rowspan="2" class="heat-label-cell">第 ${heat.heatNum} 組</td>
+                    <td class="row-label-cell">姓名</td>
+                    ${laneOrder.map(laneNum => {
+                      const l = heat.lanes.find(x => x.lane === laneNum);
+                      const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
+                      return `<td class="name-cell">${nameStr}</td>`;
+                    }).join("")}
+                  </tr>
+                  <tr>
+                    <td class="row-label-cell">成績</td>
+                    ${laneOrder.map(laneNum => {
+                      return `<td class="score-blank-cell">&nbsp;</td>`;
+                    }).join("")}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           `).join("")}
         </div>
         `;
@@ -2601,42 +2604,45 @@ function renderPrelimScoreNoticePaper() {
             <span class="sub-title-left">${subTitleText}</span>
             <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="prelim">${groupDate}</span></span>
           </div>
+          <div class="mobile-scroll-hint no-print">↔️ 手機可左右滑動查看完整道次</div>
 
           ${group.heats.map(heat => `
-            <table class="official-seeding-table">
-              <thead>
-                <tr>
-                  <th colspan="2" class="th-lane-title">道　次</th>
-                  ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td rowspan="2" class="heat-label-cell">第 ${heat.heatNum} 組</td>
-                  <td class="row-label-cell">姓名</td>
-                  ${laneOrder.map(laneNum => {
-                    const l = heat.lanes.find(x => x.lane === laneNum);
-                    const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
-                    return `<td class="name-cell">${nameStr}</td>`;
-                  }).join("")}
-                </tr>
-                <tr>
-                  <td class="row-label-cell">成績</td>
-                  ${laneOrder.map(laneNum => {
-                    const l = heat.lanes.find(x => x.lane === laneNum);
-                    if (!l || l.prelimScore === undefined || l.prelimScore === null || l.prelimScore === "") {
-                      return `<td class="score-cell">&nbsp;</td>`;
-                    }
-                    if (l.prelimScore === "未出賽") {
-                      return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
-                    }
-                    const scoreStr = typeof l.prelimScore === "number" ? l.prelimScore.toFixed(2) : l.prelimScore;
-                    const text = l.qualified ? `●${scoreStr}` : `${scoreStr}`;
-                    return `<td class="score-cell ${l.qualified ? 'qualified-score' : ''}">${text}</td>`;
-                  }).join("")}
-                </tr>
-              </tbody>
-            </table>
+            <div class="official-table-wrapper">
+              <table class="official-seeding-table">
+                <thead>
+                  <tr>
+                    <th colspan="2" class="th-lane-title">道　次</th>
+                    ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td rowspan="2" class="heat-label-cell">第 ${heat.heatNum} 組</td>
+                    <td class="row-label-cell">姓名</td>
+                    ${laneOrder.map(laneNum => {
+                      const l = heat.lanes.find(x => x.lane === laneNum);
+                      const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
+                      return `<td class="name-cell">${nameStr}</td>`;
+                    }).join("")}
+                  </tr>
+                  <tr>
+                    <td class="row-label-cell">成績</td>
+                    ${laneOrder.map(laneNum => {
+                      const l = heat.lanes.find(x => x.lane === laneNum);
+                      if (!l || l.prelimScore === undefined || l.prelimScore === null || l.prelimScore === "") {
+                        return `<td class="score-cell">&nbsp;</td>`;
+                      }
+                      if (l.prelimScore === "未出賽") {
+                        return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
+                      }
+                      const scoreStr = typeof l.prelimScore === "number" ? l.prelimScore.toFixed(2) : l.prelimScore;
+                      const text = l.qualified ? `●${scoreStr}` : `${scoreStr}`;
+                      return `<td class="score-cell ${l.qualified ? 'qualified-score' : ''}">${text}</td>`;
+                    }).join("")}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           `).join("")}
 
           <div class="official-qualify-legend">●表示晉級決賽</div>
@@ -2721,30 +2727,33 @@ function renderFinalsRosterNoticePaper() {
             <span class="sub-title-left">${subTitleText}</span>
             <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="finals">${eventDate}</span></span>
           </div>
+          <div class="mobile-scroll-hint no-print">↔️ 手機可左右滑動查看完整道次</div>
 
-          <table class="official-seeding-table">
-            <thead>
-              <tr>
-                <th colspan="2" class="th-lane-title">道　次</th>
-                ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td rowspan="2" class="heat-label-cell">決　賽</td>
-                <td class="row-label-cell">姓名</td>
-                ${laneOrder.map(laneNum => {
-                  const f = finalists.find(x => x.finalLane === laneNum);
-                  const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
-                  return `<td class="name-cell">${nameStr}</td>`;
-                }).join("")}
-              </tr>
-              <tr>
-                <td class="row-label-cell">成績</td>
-                ${laneOrder.map(() => `<td class="score-blank-cell">&nbsp;</td>`).join("")}
-              </tr>
-            </tbody>
-          </table>
+          <div class="official-table-wrapper">
+            <table class="official-seeding-table">
+              <thead>
+                <tr>
+                  <th colspan="2" class="th-lane-title">道　次</th>
+                  ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td rowspan="2" class="heat-label-cell">決　賽</td>
+                  <td class="row-label-cell">姓名</td>
+                  ${laneOrder.map(laneNum => {
+                    const f = finalists.find(x => x.finalLane === laneNum);
+                    const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
+                    return `<td class="name-cell">${nameStr}</td>`;
+                  }).join("")}
+                </tr>
+                <tr>
+                  <td class="row-label-cell">成績</td>
+                  ${laneOrder.map(() => `<td class="score-blank-cell">&nbsp;</td>`).join("")}
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         `;
       }).join("")}
@@ -2795,41 +2804,44 @@ function renderFinalsScoreNoticePaper() {
             <span class="sub-title-left">${subTitleText}</span>
             <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="finals">${eventDate}</span></span>
           </div>
+          <div class="mobile-scroll-hint no-print">↔️ 手機可左右滑動查看完整道次</div>
 
-          <table class="official-seeding-table">
-            <thead>
-              <tr>
-                <th colspan="2" class="th-lane-title">道　次</th>
-                ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td rowspan="2" class="heat-label-cell">決　賽</td>
-                <td class="row-label-cell">姓名</td>
-                ${laneOrder.map(laneNum => {
-                  const f = finalists.find(x => x.finalLane === laneNum);
-                  const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
-                  return `<td class="name-cell">${nameStr}</td>`;
-                }).join("")}
-              </tr>
-              <tr>
-                <td class="row-label-cell">成績</td>
-                ${laneOrder.map(laneNum => {
-                  const f = finalists.find(x => x.finalLane === laneNum);
-                  if (!f || f.finalScore === undefined || f.finalScore === null || f.finalScore === "") {
-                    return `<td class="score-cell">&nbsp;</td>`;
-                  }
-                  if (f.finalScore === "未出賽" || f.isFinalsDNS) {
-                    return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
-                  }
-                  const scoreStr = typeof f.finalScore === "number" ? f.finalScore.toFixed(2) : f.finalScore;
-                  const rankBadge = (f.finalRank && f.finalRank !== 99) ? `<span class="rank-circle">${f.finalRank}</span>` : "";
-                  return `<td class="score-cell ${f.finalRank === 1 ? 'qualified-score' : ''}">${rankBadge}${scoreStr}</td>`;
-                }).join("")}
-              </tr>
-            </tbody>
-          </table>
+          <div class="official-table-wrapper">
+            <table class="official-seeding-table">
+              <thead>
+                <tr>
+                  <th colspan="2" class="th-lane-title">道　次</th>
+                  ${laneOrder.map(laneNum => `<th>第 ${laneNum} 道${laneColorMap[laneNum] || ''}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td rowspan="2" class="heat-label-cell">決　賽</td>
+                  <td class="row-label-cell">姓名</td>
+                  ${laneOrder.map(laneNum => {
+                    const f = finalists.find(x => x.finalLane === laneNum);
+                    const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
+                    return `<td class="name-cell">${nameStr}</td>`;
+                  }).join("")}
+                </tr>
+                <tr>
+                  <td class="row-label-cell">成績</td>
+                  ${laneOrder.map(laneNum => {
+                    const f = finalists.find(x => x.finalLane === laneNum);
+                    if (!f || f.finalScore === undefined || f.finalScore === null || f.finalScore === "") {
+                      return `<td class="score-cell">&nbsp;</td>`;
+                    }
+                    if (f.finalScore === "未出賽" || f.isFinalsDNS) {
+                      return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
+                    }
+                    const scoreStr = typeof f.finalScore === "number" ? f.finalScore.toFixed(2) : f.finalScore;
+                    const rankBadge = (f.finalRank && f.finalRank !== 99) ? `<span class="rank-circle">${f.finalRank}</span>` : "";
+                    return `<td class="score-cell ${f.finalRank === 1 ? 'qualified-score' : ''}">${rankBadge}${scoreStr}</td>`;
+                  }).join("")}
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <div class="official-qualify-legend">①②③...表示決賽名次</div>
         </div>
