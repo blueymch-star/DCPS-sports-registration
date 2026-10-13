@@ -992,9 +992,8 @@ async function loadSeedingFromCloud(showNotify = false) {
         // 雲端既然已經有體育組長同步上去的排道資料，預設將預賽名冊公告視為發布
         // (若本機快取已有更細緻的 published 狀態則予以尊重保留)
         if (!state.published) state.published = {};
-        if (state.published.prelimRoster !== false) {
-          state.published.prelimRoster = true;
-        }
+        // 只要雲端有資料，前台一律發布開放查閱
+        state.published.prelimRoster = true;
 
         // 同步寫入本機快取
         saveSeedingToLocalStorage();
@@ -1353,10 +1352,10 @@ function renderPublicNoticeView() {
   const type = state.activePublicNotice || "prelim-roster";
 
   if (type === "prelim-roster") {
-    const heatsEl = document.getElementById("heatsContainer");
-    const hasHeats = heatsEl && heatsEl.querySelector(".official-print-page");
-    if (state.published.prelimRoster && hasHeats) {
-      container.innerHTML = `<div class="official-roster-paper">${heatsEl.innerHTML}</div>`;
+    const hasSeeded = state.seededGroups && state.seededGroups.length > 0;
+    if (state.published.prelimRoster && hasSeeded) {
+      const html = buildPrelimNoticeHtml(state.seededGroups);
+      container.innerHTML = `<div class="official-roster-paper">${html}</div>`;
     } else {
       container.innerHTML = `
         <div class="empty-state no-print" style="background:#fff; padding:3.5rem 1.5rem; border-radius:8px; border:1px solid #e2e8f0; text-align:center;">
@@ -2192,17 +2191,14 @@ function groupSeededGroupsByGradeAndEvent(groups) {
 }
 
 /**
- * 產出 100% 符合大庄國小校慶官方格式的預賽分組參賽名單 (同年級同項目列印在同一頁)
+ * 產出符合大庄國小官方公文紙張規格的預賽分組 HTML（純資料運算，不依賴特定 DOM 狀態）
  */
-function renderPrelimNotice() {
-  const container = document.getElementById("heatsContainer");
-  if (!state.seededGroups || state.seededGroups.length === 0) {
-    container.innerHTML = `<div class="empty-state no-print">請點擊上方「🚀 執行反向蛇形編排」按鈕產出公告名單。</div>`;
-    return;
-  }
+function buildPrelimNoticeHtml(seededGroups) {
+  if (!seededGroups || seededGroups.length === 0) return "";
 
-  const laneCount = parseInt(document.getElementById("seedingLaneCount").value, 10) || 5;
-  // 號碼衣顏色配置：第5道橘、第4道紫、第3道黃、第2道藍、第1道紅
+  const laneCountEl = document.getElementById("seedingLaneCount");
+  const laneCount = laneCountEl ? (parseInt(laneCountEl.value, 10) || 5) : 5;
+
   const laneColorMap = {
     5: "橘",
     4: "紫",
@@ -2212,20 +2208,14 @@ function renderPrelimNotice() {
     6: "綠"
   };
 
-  // 取得使用者自訂比賽日期
-  const dateInput = document.getElementById("competitionDateInput");
-  const compDate = (dateInput && dateInput.value.trim()) ? dateInput.value.trim() : getDefaultCompDate();
-
-  // 依圖片格式：道次欄位由左至右為 第 5 道、第 4 道、第 3 道、第 2 道、第 1 道
   const laneOrder = [];
   for (let l = laneCount; l >= 1; l--) {
     laneOrder.push(l);
   }
 
-  // 將所有組別依「同年級、同一個項目」分頁，每一頁（女生組＋男生組）列印在同一頁
-  const printPages = groupSeededGroupsByGradeAndEvent(state.seededGroups);
+  const printPages = groupSeededGroupsByGradeAndEvent(seededGroups);
 
-  let html = printPages.map(page => `
+  return printPages.map(page => `
     <div class="official-print-page">
       <div class="official-header">
         <div class="official-school-title">${getSchoolName()} ${getAnniversary()} 週年校慶運動競賽參賽名單</div>
@@ -2274,8 +2264,21 @@ function renderPrelimNotice() {
       }).join("")}
     </div>
   `).join("");
+}
 
-  container.innerHTML = html;
+/**
+ * 產出 100% 符合大庄國小校慶官方格式的預賽分組參賽名單 (同年級同項目列印在同一頁)
+ */
+function renderPrelimNotice() {
+  const container = document.getElementById("heatsContainer");
+  if (!container) return;
+
+  if (!state.seededGroups || state.seededGroups.length === 0) {
+    container.innerHTML = `<div class="empty-state no-print">請點擊上方「🚀 執行反向蛇形編排」按鈕產出公告名單。</div>`;
+    return;
+  }
+
+  container.innerHTML = buildPrelimNoticeHtml(state.seededGroups);
   renderPublicNoticeView();
 }
 
