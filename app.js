@@ -831,6 +831,191 @@ async function loadRegistrationsFromCloud(showNotify = false) {
       showStatus("⚠️ 無法連線至 Google 試算表，已維持本機暫存名冊。", "error");
     }
   }
+
+  // 自動嘗試從雲端或本地還原預賽分組與公告狀態（讓手機或其他裝置能即時看到公布的賽程）
+  await loadSeedingFromCloud(showNotify);
+}
+
+// 本地快取金鑰常數
+const STORAGE_KEY_SEEDED = "dcps_seeded_groups_cache";
+const STORAGE_KEY_PUBLISHED = "dcps_published_state_cache";
+
+function saveSeedingToLocalStorage() {
+  try {
+    if (state.seededGroups && state.seededGroups.length > 0) {
+      localStorage.setItem(STORAGE_KEY_SEEDED, JSON.stringify(state.seededGroups));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_SEEDED);
+    }
+    localStorage.setItem(STORAGE_KEY_PUBLISHED, JSON.stringify(state.published));
+  } catch (e) {
+    console.warn("無法寫入 localStorage：", e);
+  }
+}
+
+function restoreSeedingFromLocalStorage() {
+  try {
+    const savedPublished = localStorage.getItem(STORAGE_KEY_PUBLISHED);
+    if (savedPublished) {
+      const parsedPub = JSON.parse(savedPublished);
+      state.published = Object.assign(state.published || {}, parsedPub);
+    }
+    const savedSeeded = localStorage.getItem(STORAGE_KEY_SEEDED);
+    if (savedSeeded) {
+      const parsedGroups = JSON.parse(savedSeeded);
+      if (Array.isArray(parsedGroups) && parsedGroups.length > 0) {
+        state.seededGroups = parsedGroups;
+        if (!state.activeSeededGroup && state.seededGroups.length > 0) {
+          state.activeSeededGroup = state.seededGroups[0];
+          state.prelimHeats = state.activeSeededGroup.heats;
+        }
+        renderPrelimNotice();
+        renderPrelimScoreInput();
+        if (state.published.prelimScore) {
+          renderPrelimScoreNoticePaper();
+          renderFinalsRosterNoticePaper();
+          renderFinalsScoreInput();
+        }
+        if (state.published.finalsScore) {
+          renderFinalsScoreNoticePaper();
+        }
+        updatePublishControlUI();
+        renderPublicNoticeView();
+        const btnSave = document.getElementById("btnSaveSeedingCloud");
+        if (btnSave) btnSave.style.display = "inline-flex";
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn("從 localStorage 還原失敗：", e);
+  }
+  return false;
+}
+
+/**
+ * 從 Google 試算表（或本地快取備援）載入已編排的「預賽分組與道次」
+ * 解決手機或不同瀏覽器開啟時看不到已公布名單的痛點
+ */
+async function loadSeedingFromCloud(showNotify = false) {
+  // 先嘗試本機快取以求極速渲染
+  restoreSeedingFromLocalStorage();
+
+  if (!CONFIG || !CONFIG.GAS_API_URL) return;
+
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getSeeding`);
+    const json = await res.json();
+
+    if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
+      // 成功從雲端取回預賽道次資料！依照 event -> heat -> lane 進行重組
+      const groupDict = new Map();
+
+      json.data.forEach(row => {
+        const title = (row.event || "").trim();
+        if (!title) return;
+
+        if (!groupDict.has(title)) {
+          // 推算 event 與 category
+          let evtName = "100公尺";
+          if (title.includes("60公尺") || title.includes("60 公尺")) evtName = "60公尺";
+          else if (title.includes("200公尺") || title.includes("200 公尺")) evtName = "200公尺";
+
+          let catName = "男生組";
+          if (title.includes("女生組") || title.includes("女生")) catName = "女生組";
+
+          groupDict.set(title, {
+            title: title,
+            event: evtName,
+            category: catName,
+            heatsMap: new Map()
+          });
+        }
+
+        const grp = groupDict.get(title);
+        // 解析組別數字：例如 "第 1 組" -> 1
+        const heatMatch = String(row.heat || "").match(/\d+/);
+        const heatNum = heatMatch ? parseInt(heatMatch[0], 10) : 1;
+
+        if (!grp.heatsMap.has(heatNum)) {
+          grp.heatsMap.set(heatNum, {
+            heatNum: heatNum,
+            lanes: []
+          });
+        }
+
+        const heatObj = grp.heatsMap.get(heatNum);
+        // 解析道次數字：例如 "4 道" 或 4 -> 4
+        const laneMatch = String(row.lane || "").match(/\d+/);
+        const laneNum = laneMatch ? parseInt(laneMatch[0], 10) : 1;
+
+        heatObj.lanes.push({
+          lane: laneNum,
+          athlete: {
+            id: `seed-${row.className}-${row.name}`,
+            className: row.className || "",
+            studentNo: row.studentNo ? String(row.studentNo).padStart(2, "0") : "",
+            name: row.name || "",
+            seedScore: parseFloat(row.seedScore) || 0
+          }
+        });
+      });
+
+      // 將 Map 轉換為前端標準的 state.seededGroups 結構
+      const reconstructedGroups = [];
+      const sortedTitles = Array.from(groupDict.keys()).sort(compareGroupKeys);
+
+      sortedTitles.forEach(title => {
+        const grp = groupDict.get(title);
+        const sortedHeatNums = Array.from(grp.heatsMap.keys()).sort((a, b) => a - b);
+        const heats = sortedHeatNums.map(hn => {
+          const h = grp.heatsMap.get(hn);
+          // 各組內的道次由小到大排序 (1 到 6 道)
+          h.lanes.sort((a, b) => a.lane - b.lane);
+          return h;
+        });
+
+        reconstructedGroups.push({
+          title: grp.title,
+          event: grp.event,
+          category: grp.category,
+          heats: heats
+        });
+      });
+
+      if (reconstructedGroups.length > 0) {
+        state.seededGroups = reconstructedGroups;
+        if (!state.activeSeededGroup) {
+          state.activeSeededGroup = state.seededGroups[0];
+          state.prelimHeats = state.activeSeededGroup.heats;
+        }
+
+        // 雲端既然已經有體育組長同步上去的排道資料，預設將預賽名冊公告視為發布
+        // (若本機快取已有更細緻的 published 狀態則予以尊重保留)
+        if (!state.published) state.published = {};
+        if (state.published.prelimRoster !== false) {
+          state.published.prelimRoster = true;
+        }
+
+        // 同步寫入本機快取
+        saveSeedingToLocalStorage();
+
+        // 重新渲染畫面
+        renderPrelimNotice();
+        renderPrelimScoreInput();
+        updatePublishControlUI();
+        renderPublicNoticeView();
+
+        const btnSave = document.getElementById("btnSaveSeedingCloud");
+        if (btnSave) btnSave.style.display = "inline-flex";
+
+        if (showNotify) {
+          showStatus(`✅ 成功從雲端同步 ${state.seededGroups.length} 個項目的預賽分組名冊！`, "success");
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("自動從雲端獲取預賽排道失敗：", err);
+  }
 }
 
 // 徹底清空系統所有狀態與前後台畫面
@@ -895,7 +1080,8 @@ function resetAllSystemData() {
   // 6. 更新後台所有公告發布控制鍵狀態
   updatePublishControlUI();
 
-  // 7. 同步重置前台全校名單與公告看板
+  // 7. 同步重置前台全校名單與公告看板並清除快取
+  saveSeedingToLocalStorage();
   renderPublicRegistrationTable();
   renderPublicNoticeView();
 }
@@ -971,6 +1157,7 @@ function publishPrelimRoster() {
   }
   renderPrelimNotice();
   state.published.prelimRoster = true;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPublicNoticeView();
   showStatus("📢 預賽分組參賽名單已成功發布至前台！全校師生現已可查看與列印。", "success");
@@ -980,6 +1167,7 @@ function publishPrelimRoster() {
 function unpublishPrelimRoster() {
   if (confirm("確定要撤回/刪除前台的預賽參賽名單公告嗎？\n\n撤回後前台將暫時隱藏此份公告。")) {
     state.published.prelimRoster = false;
+    saveSeedingToLocalStorage();
     updatePublishControlUI();
     renderPublicNoticeView();
     showStatus("🗑️ 已撤回前台預賽名冊公告，前台已恢復為未發布狀態。", "info");
@@ -997,6 +1185,7 @@ function publishPrelimScore() {
   renderFinalsRosterNoticePaper();
   state.published.prelimScore = true;
   state.published.finalsRoster = true;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPublicNoticeView();
   showStatus("📢 預賽完賽成績公告與決賽分組名冊已成功發布至前台！", "success");
@@ -1007,6 +1196,7 @@ function unpublishPrelimScore() {
   if (confirm("確定要撤回/刪除前台的預賽成績公告與決賽名單嗎？\n\n若成績有誤，撤回後可於後台重新修正再行發布。")) {
     state.published.prelimScore = false;
     state.published.finalsRoster = false;
+    saveSeedingToLocalStorage();
     updatePublishControlUI();
     renderPublicNoticeView();
     showStatus("🗑️ 已撤回前台預賽成績與決賽名冊公告。", "info");
@@ -1022,6 +1212,7 @@ function publishFinalsScore() {
   }
   renderFinalsScoreNoticePaper();
   state.published.finalsScore = true;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPublicNoticeView();
   showStatus("📢 決賽完賽成績公告已成功發布至前台！全校師生現已可查看最終成績與名次。", "success");
@@ -1031,6 +1222,7 @@ function publishFinalsScore() {
 function unpublishFinalsScore() {
   if (confirm("確定要撤回/刪除前台的決賽成績公告嗎？\n\n撤回後前台將隱藏決賽成績公告。")) {
     state.published.finalsScore = false;
+    saveSeedingToLocalStorage();
     updatePublishControlUI();
     renderPublicNoticeView();
     showStatus("🗑️ 已撤回前台決賽成績公告。", "info");
@@ -1932,6 +2124,7 @@ function runSerpentineSeeding() {
   }
 
   state.published.prelimRoster = false;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPrelimNotice();
   renderPrelimScoreInput();
@@ -2108,6 +2301,7 @@ async function saveSeedingToCloud() {
   });
 
   try {
+    saveSeedingToLocalStorage();
     const res = await fetch(CONFIG.GAS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -2351,6 +2545,7 @@ function calculateQualifiers() {
 
   state.published.prelimScore = false;
   state.published.finalsRoster = false;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPrelimScoreNoticePaper();
   renderFinalsRosterNoticePaper();
@@ -2766,6 +2961,7 @@ function calculateFinalResults() {
 
   // 2. 產出官方格式決賽成績公告（成績前帶圈圈外框名次）
   state.published.finalsScore = false;
+  saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderFinalsScoreNoticePaper();
 
