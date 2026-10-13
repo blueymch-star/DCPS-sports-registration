@@ -29,8 +29,22 @@ if (typeof window !== "undefined") {
   } catch(e) {}
 }
 
+/**
+ * 安全防護工具：HTML 實體編碼 (防止 XSS 跨站腳本攻擊)
+ */
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // 全域狀態
 const state = {
+  adminToken: "",               // 管理員會話金鑰
   currentRole: "teacher",       // 'teacher' (前台) | 'admin' (後台)
   activePublicNotice: "prelim-roster", // 'prelim-roster' | 'prelim-score' | 'finals-roster' | 'finals-score'
   published: {
@@ -47,6 +61,13 @@ const state = {
   finalResults: [],    // 決賽完賽結果
   spreadsheetUrl: null
 };
+
+/**
+ * 取得當前有效的管理金鑰 (優先使用內存金鑰，備援使用 sessionStorage)
+ */
+function getAdminToken() {
+  return state.adminToken || sessionStorage.getItem("dcps_admin_token") || "";
+}
 
 // 全校各年級班級清單 (大庄國小三至六年級)
 const ALL_SCHOOL_CLASSES = [
@@ -210,17 +231,73 @@ function initRoleAndModal() {
     });
   }
 
-  const doLogin = (pwd) => {
+  const doLogin = async (pwd) => {
     const inputVal = (pwd !== undefined ? pwd : (pwdInput ? pwdInput.value : "")).trim();
-    if (inputVal === "183618") {
-      hideModal();
-      switchRole("admin");
-      showStatus("👑 歡迎體育組長登入！現已切換至賽務管理後台控制台。", "success");
-    } else {
-      if (errorMsg) errorMsg.style.display = "block";
-      if (pwdInput) {
-        pwdInput.focus();
-        pwdInput.select();
+    if (!inputVal) {
+      if (errorMsg) {
+        errorMsg.innerText = "請輸入體育組長管理密碼！";
+        errorMsg.style.display = "block";
+      }
+      return;
+    }
+
+    if (confirmLoginBtn) {
+      confirmLoginBtn.disabled = true;
+      confirmLoginBtn.innerText = "驗證中...";
+    }
+
+    try {
+      const res = await fetch(CONFIG.GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "verifyAdmin",
+          token: inputVal
+        })
+      });
+      const json = await res.json();
+      if (json.status === "success") {
+        state.adminToken = inputVal;
+        try { sessionStorage.setItem("dcps_admin_token", inputVal); } catch(e) {}
+        if (json.spreadsheetUrl) {
+          state.spreadsheetUrl = json.spreadsheetUrl;
+          const link = document.getElementById("cloudSheetLink");
+          if (link) {
+            link.href = json.spreadsheetUrl;
+            link.style.display = "inline-flex";
+          }
+        }
+        hideModal();
+        switchRole("admin");
+        showStatus("👑 歡迎體育組長登入！現已安全切換至賽務管理後台控制台。", "success");
+      } else {
+        if (errorMsg) {
+          errorMsg.innerText = json.message || "密碼錯誤，請重新確認！";
+          errorMsg.style.display = "block";
+        }
+        if (pwdInput) {
+          pwdInput.focus();
+          pwdInput.select();
+        }
+      }
+    } catch (err) {
+      // 網路連線中斷或離線環境備援檢查
+      if (inputVal === "183618") {
+        state.adminToken = inputVal;
+        try { sessionStorage.setItem("dcps_admin_token", inputVal); } catch(e) {}
+        hideModal();
+        switchRole("admin");
+        showStatus("👑 離線備援模式：歡迎體育組長登入！", "success");
+      } else {
+        if (errorMsg) {
+          errorMsg.innerText = "密碼錯誤或無法連線驗證伺服器！";
+          errorMsg.style.display = "block";
+        }
+      }
+    } finally {
+      if (confirmLoginBtn) {
+        confirmLoginBtn.disabled = false;
+        confirmLoginBtn.innerText = "驗證登入";
       }
     }
   };
@@ -244,6 +321,8 @@ function initRoleAndModal() {
 
   if (exitAdminBtn) {
     exitAdminBtn.addEventListener("click", () => {
+      state.adminToken = "";
+      try { sessionStorage.removeItem("dcps_admin_token"); } catch(e) {}
       switchRole("teacher");
       showStatus("已安全登出後台，已切換回教師與全校公開前台。", "info");
     });
@@ -749,7 +828,10 @@ function initDynamicRegistrationForm() {
         await fetch(CONFIG.GAS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: "clearAll" })
+          body: JSON.stringify({
+            action: "clearAll",
+            adminToken: getAdminToken()
+          })
         });
       } catch (err) {
         console.warn("清空雲端試算表時發生錯誤：", err);
@@ -1241,13 +1323,13 @@ function renderRegistrationTable() {
       tbody.innerHTML = state.registrations.map((item, idx) => `
         <tr>
           <td>${idx + 1}</td>
-          <td><span class="badge badge-silver">${item.className}</span></td>
-          <td><strong>${item.event}</strong></td>
-          <td><span class="badge ${item.category === '男生組' ? 'badge-small-q' : 'badge-bronze'}">${item.category}</span></td>
-          <td><strong>${item.name}</strong></td>
-          <td><code>${item.seedScore.toFixed(2)} 秒</code></td>
+          <td><span class="badge badge-silver">${escapeHtml(item.className)}</span></td>
+          <td><strong>${escapeHtml(item.event)}</strong></td>
+          <td><span class="badge ${item.category === '男生組' ? 'badge-small-q' : 'badge-bronze'}">${escapeHtml(item.category)}</span></td>
+          <td><strong>${escapeHtml(item.name)}</strong></td>
+          <td><code>${typeof item.seedScore === 'number' ? item.seedScore.toFixed(2) : escapeHtml(item.seedScore)} 秒</code></td>
           <td>
-            <button class="btn btn-danger-sm" onclick="removeRegistration('${item.id}')">刪除</button>
+            <button class="btn btn-danger-sm" onclick="removeRegistration('${escapeHtml(item.id).replace(/'/g, "\\'")}')">刪除</button>
           </td>
         </tr>
       `).join("");
@@ -1336,11 +1418,11 @@ function renderPublicRegistrationTable() {
   tbody.innerHTML = list.map((item, idx) => `
     <tr>
       <td>${idx + 1}</td>
-      <td><span class="badge badge-silver">${item.className}</span></td>
-      <td><strong>${item.event}</strong></td>
-      <td><span class="badge ${item.category === '男生組' ? 'badge-small-q' : 'badge-bronze'}">${item.category}</span></td>
-      <td><strong>${item.name}</strong></td>
-      <td><code>${item.seedScore.toFixed(2)} 秒</code></td>
+      <td><span class="badge badge-silver">${escapeHtml(item.className)}</span></td>
+      <td><strong>${escapeHtml(item.event)}</strong></td>
+      <td><span class="badge ${item.category === '男生組' ? 'badge-small-q' : 'badge-bronze'}">${escapeHtml(item.category)}</span></td>
+      <td><strong>${escapeHtml(item.name)}</strong></td>
+      <td><code>${typeof item.seedScore === 'number' ? item.seedScore.toFixed(2) : escapeHtml(item.seedScore)} 秒</code></td>
     </tr>
   `).join("");
 }
@@ -2248,7 +2330,7 @@ function buildPrelimNoticeHtml(seededGroups) {
                     <td class="row-label-cell">姓名</td>
                     ${laneOrder.map(laneNum => {
                       const l = heat.lanes.find(x => x.lane === laneNum);
-                      const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
+                      const nameStr = l ? `${escapeHtml(l.athlete.className)} ${escapeHtml(l.athlete.name)}` : '&nbsp;';
                       return `<td class="name-cell">${nameStr}</td>`;
                     }).join("")}
                   </tr>
@@ -2313,7 +2395,8 @@ async function saveSeedingToCloud() {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "saveSeeding",
-        seedings: seedings
+        seedings: seedings,
+        adminToken: getAdminToken()
       })
     });
     const json = await res.json();
@@ -2395,11 +2478,11 @@ function renderPrelimScoreInput() {
           </thead>
           <tbody>
             ${heat.lanes.map(l => `
-              <tr data-athlete-id="${l.athlete.id}" data-heat="${heat.heatNum}" data-lane="${l.lane}">
+              <tr data-athlete-id="${escapeHtml(l.athlete.id)}" data-heat="${heat.heatNum}" data-lane="${l.lane}">
                 <td><span class="lane-chip ${l.lane === 4 ? 'favored' : (l.lane === 5 ? 'favored-2' : '')}">${l.lane}道</span></td>
-                <td>${l.athlete.className}</td>
-                <td><strong>${l.athlete.name}</strong></td>
-                <td>${l.athlete.seedScore.toFixed(2)}s</td>
+                <td>${escapeHtml(l.athlete.className)}</td>
+                <td><strong>${escapeHtml(l.athlete.name)}</strong></td>
+                <td>${typeof l.athlete.seedScore === 'number' ? l.athlete.seedScore.toFixed(2) : escapeHtml(l.athlete.seedScore)}s</td>
                 <td>
                   <input type="text" class="prelim-score-input"
                          id="score_${heat.heatNum}_${l.lane}" placeholder="輸入秒數或未出賽"
@@ -2621,7 +2704,7 @@ function renderPrelimScoreNoticePaper() {
                     <td class="row-label-cell">姓名</td>
                     ${laneOrder.map(laneNum => {
                       const l = heat.lanes.find(x => x.lane === laneNum);
-                      const nameStr = l ? `${l.athlete.className} ${l.athlete.name}` : '&nbsp;';
+                      const nameStr = l ? `${escapeHtml(l.athlete.className)} ${escapeHtml(l.athlete.name)}` : '&nbsp;';
                       return `<td class="name-cell">${nameStr}</td>`;
                     }).join("")}
                   </tr>
@@ -2743,7 +2826,7 @@ function renderFinalsRosterNoticePaper() {
                   <td class="row-label-cell">姓名</td>
                   ${laneOrder.map(laneNum => {
                     const f = finalists.find(x => x.finalLane === laneNum);
-                    const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
+                    const nameStr = f ? `${escapeHtml(f.athlete.className)} ${escapeHtml(f.athlete.name)}` : '&nbsp;';
                     return `<td class="name-cell">${nameStr}</td>`;
                   }).join("")}
                 </tr>
@@ -2820,7 +2903,7 @@ function renderFinalsScoreNoticePaper() {
                   <td class="row-label-cell">姓名</td>
                   ${laneOrder.map(laneNum => {
                     const f = finalists.find(x => x.finalLane === laneNum);
-                    const nameStr = f ? `${f.athlete.className} ${f.athlete.name}` : '&nbsp;';
+                    const nameStr = f ? `${escapeHtml(f.athlete.className)} ${escapeHtml(f.athlete.name)}` : '&nbsp;';
                     return `<td class="name-cell">${nameStr}</td>`;
                   }).join("")}
                 </tr>
@@ -2887,9 +2970,9 @@ function renderFinalsScoreInput() {
               ${group.finalists.map(f => `
                 <tr>
                   <td><span class="lane-chip ${f.finalLane === 4 ? 'favored' : (f.finalLane === 5 ? 'favored-2' : '')}">${f.finalLane} 道</span></td>
-                  <td><strong>${f.athlete.className}</strong></td>
-                  <td><strong>${f.athlete.name}</strong></td>
-                  <td><code>${typeof f.prelimScore === 'number' ? f.prelimScore.toFixed(2) : f.prelimScore} 秒</code></td>
+                  <td><strong>${escapeHtml(f.athlete.className)}</strong></td>
+                  <td><strong>${escapeHtml(f.athlete.name)}</strong></td>
+                  <td><code>${typeof f.prelimScore === 'number' ? f.prelimScore.toFixed(2) : escapeHtml(f.prelimScore)} 秒</code></td>
                   <td>
                     <input type="text"
                            id="final_score_${gIdx}_${f.finalLane}"
@@ -3013,11 +3096,11 @@ function renderFinalsResultSummaryTable(groups) {
     <tr>
       <td>${item.finalRank && item.finalRank !== 99 ? `<span class="rank-circle">${item.finalRank}</span> 第 ${item.finalRank} 名` : '<span class="text-muted">未出賽</span>'}</td>
       <td><span class="lane-chip ${item.finalLane === 4 ? 'favored' : (item.finalLane === 5 ? 'favored-2' : '')}">${item.finalLane} 道</span></td>
-      <td><strong>${item.athlete.className}</strong></td>
-      <td><strong>${item.athlete.name}</strong> (${item.groupTitle})</td>
-      <td><strong>${typeof item.finalScore === 'number' ? item.finalScore.toFixed(2) : item.finalScore}</strong></td>
-      <td><code>${typeof item.prelimScore === 'number' ? item.prelimScore.toFixed(2) : item.prelimScore} 秒</code></td>
-      <td><span class="badge ${item.finalRank === 1 ? 'badge-gold' : (item.finalRank === 2 || item.finalRank === 3 ? 'badge-silver' : 'badge-small-q')}">${item.awardText || '-'}</span></td>
+      <td><strong>${escapeHtml(item.athlete.className)}</strong></td>
+      <td><strong>${escapeHtml(item.athlete.name)}</strong> (${escapeHtml(item.groupTitle)})</td>
+      <td><strong>${typeof item.finalScore === 'number' ? item.finalScore.toFixed(2) : escapeHtml(item.finalScore)}</strong></td>
+      <td><code>${typeof item.prelimScore === 'number' ? item.prelimScore.toFixed(2) : escapeHtml(item.prelimScore)} 秒</code></td>
+      <td><span class="badge ${item.finalRank === 1 ? 'badge-gold' : (item.finalRank === 2 || item.finalRank === 3 ? 'badge-silver' : 'badge-small-q')}">${escapeHtml(item.awardText || '-')}</span></td>
     </tr>
   `).join("");
 }
@@ -3137,7 +3220,8 @@ async function exportFinalsToCloud() {
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
         action: "saveFinalResults",
-        finals: allFinalists
+        finals: allFinalists,
+        adminToken: getAdminToken()
       })
     });
     const json = await res.json();
