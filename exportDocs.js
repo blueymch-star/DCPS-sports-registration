@@ -294,6 +294,63 @@ function setXmlCellText(cell, text, isBold = false, fontSize = 26) {
 }
 
 /**
+ * 自動更新 docx 範本中各比賽項目抬頭段落之比賽日期
+ */
+function updateDocxParagraphDates(xmlDoc, ns, stage = "prelim") {
+  const paragraphs = xmlDoc.getElementsByTagNameNS(ns, "p");
+  const keyword = stage === "finals" ? "決賽名單" : "預賽名單";
+  const eventList = stage === "finals" ? EXPORT_FINALS_EVENT_ORDER : EXPORT_PRELIM_EVENT_ORDER;
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+    const fullText = (p.textContent || "").replace(/\s+/g, "");
+    if (fullText.includes(keyword)) {
+      for (const ev of eventList) {
+        const evNorm = ev.replace(/\s+/g, "");
+        if (fullText.includes(evNorm)) {
+          const targetDate = typeof getEventDate === "function" ? getEventDate(ev, stage) : (typeof getDefaultCompDate === "function" ? getDefaultCompDate() : "115.11.10");
+          const newText = `${ev}${keyword}  日期  ${targetDate}`;
+
+          // 移除所有現有的 r 標籤
+          const runs = Array.from(p.getElementsByTagNameNS(ns, "r"));
+          runs.forEach(r => p.removeChild(r));
+
+          // 建立新的乾淨 run
+          const newRun = xmlDoc.createElementNS(ns, "w:r");
+          const rPr = xmlDoc.createElementNS(ns, "w:rPr");
+
+          const rFonts = xmlDoc.createElementNS(ns, "w:rFonts");
+          rFonts.setAttributeNS(ns, "w:eastAsia", "標楷體");
+          rFonts.setAttributeNS(ns, "w:hint", "eastAsia");
+          rPr.appendChild(rFonts);
+
+          const color = xmlDoc.createElementNS(ns, "w:color");
+          color.setAttributeNS(ns, "w:val", "000000");
+          rPr.appendChild(color);
+
+          const sz = xmlDoc.createElementNS(ns, "w:sz");
+          sz.setAttributeNS(ns, "w:val", "32");
+          rPr.appendChild(sz);
+          const szCs = xmlDoc.createElementNS(ns, "w:szCs");
+          szCs.setAttributeNS(ns, "w:val", "32");
+          rPr.appendChild(szCs);
+
+          newRun.appendChild(rPr);
+
+          const t = xmlDoc.createElementNS(ns, "w:t");
+          t.setAttribute("xml:space", "preserve");
+          t.textContent = newText;
+          newRun.appendChild(t);
+
+          p.appendChild(newRun);
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
  * 透過 JSZip 讀取 .docx 範本、修改 word/document.xml 並重新打包為 Blob
  */
 async function processDocxTemplate(templateUrl, modifierCallback) {
@@ -367,6 +424,8 @@ function generatePrelimHtmlDoc(dataMap, includeScores = false) {
     const gradeCat = match ? `${match[1]}${match[2]}` : evName;
     const eventItem = match ? match[3] : "";
 
+    const eventDate = (typeof getEventDate === "function" ? getEventDate(evName, "prelim") : compDate);
+
     html += `
       <div style="margin-bottom: 24px;">
         <div class="page-title">大庄國小 ${anniversary} 週年校慶  ${includeScores ? "競賽預賽成績" : "運動競賽預賽名單"}</div>
@@ -374,7 +433,7 @@ function generatePrelimHtmlDoc(dataMap, includeScores = false) {
           <tr style="border: none;">
             <td style="border: none; text-align: left; font-weight: bold; font-size: 14pt; width: 33%;">年級組別：${gradeCat}</td>
             <td style="border: none; text-align: center; font-weight: bold; font-size: 14pt; width: 33%;">項目：${eventItem}</td>
-            <td style="border: none; text-align: right; font-weight: bold; font-size: 14pt; width: 33%;">比賽日期：${compDate}</td>
+            <td style="border: none; text-align: right; font-weight: bold; font-size: 14pt; width: 33%;">比賽日期：${eventDate}</td>
           </tr>
         </table>
     `;
@@ -453,6 +512,8 @@ function generateFinalsHtmlDoc(dataMap, includeScores = false) {
     const gradeCat = match ? `${match[1]}${match[2]}` : evName;
     const eventItem = match ? match[3] : "";
 
+    const eventDate = (typeof getEventDate === "function" ? getEventDate(evName, "finals") : compDate);
+
     html += `
       <div style="margin-bottom: 24px;">
         <div class="page-title">大庄國小 ${anniversary} 週年校慶  ${includeScores ? "運動競賽決賽成績" : "運動競賽決賽名單"}</div>
@@ -460,7 +521,7 @@ function generateFinalsHtmlDoc(dataMap, includeScores = false) {
           <tr style="border: none;">
             <td style="border: none; text-align: left; font-weight: bold; font-size: 14pt; width: 33%;">年級組別：${gradeCat}</td>
             <td style="border: none; text-align: center; font-weight: bold; font-size: 14pt; width: 33%;">項目：${eventItem}</td>
-            <td style="border: none; text-align: right; font-weight: bold; font-size: 14pt; width: 33%;">比賽日期：${compDate}</td>
+            <td style="border: none; text-align: right; font-weight: bold; font-size: 14pt; width: 33%;">比賽日期：${eventDate}</td>
           </tr>
         </table>
         <table>
@@ -536,6 +597,7 @@ async function downloadStage1PrelimRosterWord() {
             }
           }
         });
+        updateDocxParagraphDates(xmlDoc, ns, "prelim");
       });
       filename = "115校慶(71周年)運動競賽預賽名單_已編排賽道.docx";
     } catch (docxErr) {
@@ -598,6 +660,7 @@ async function downloadStage2PrelimResultsWord() {
             }
           }
         });
+        updateDocxParagraphDates(xmlDoc, ns, "prelim");
       });
       filename = "115校慶(71周年)運動競賽預賽名單_含預賽成績.docx";
     } catch (docxErr) {
@@ -657,6 +720,7 @@ async function downloadStage3FinalsRosterWord() {
             setXmlCellText(row2Cells[colIdx], "", false, 26);
           }
         });
+        updateDocxParagraphDates(xmlDoc, ns, "finals");
       });
       filename = "115校慶(71周年)運動競賽決賽名單_已編排賽道.docx";
     } catch (docxErr) {
@@ -716,6 +780,7 @@ async function downloadStage4FinalsResultsWord() {
             }
           }
         });
+        updateDocxParagraphDates(xmlDoc, ns, "finals");
       });
       filename = "115校慶(71周年)運動競賽決賽名單_含決賽成績.docx";
     } catch (docxErr) {

@@ -123,6 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initClassLockEvents();
   renderClassLockControlUI();
   initSeedingEvents();
+  initScheduleModal();
   initPrelimScoringEvents();
   initFinalsEvents();
   checkCloudStatus();
@@ -1340,9 +1341,280 @@ function initSeedingEvents() {
     dateInput.addEventListener("input", () => {
       const dates = document.querySelectorAll(".notice-date-display");
       const currentVal = dateInput.value.trim() || getDefaultCompDate();
-      dates.forEach(el => el.innerText = currentVal);
+      dates.forEach(el => {
+        // 若該公告元素未帶特定項目名稱，套用全域備援日期
+        if (!el.dataset.event) {
+          el.innerText = currentVal;
+        }
+      });
     });
   }
+}
+
+// ==========================================
+// 各項目賽程日期排程設定 (彈窗與資料存取)
+// ==========================================
+
+// 備援與全域確保函式
+window.getEventScheduleMap = function(stage = "prelim") {
+  const storageKey = `dcps_event_dates_${stage}`;
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+
+  if (window._scheduleCache && window._scheduleCache[stage]) {
+    return { ...window._scheduleCache[stage] };
+  }
+
+  if (typeof CONFIG !== "undefined" && CONFIG.DEFAULT_SCHEDULE && CONFIG.DEFAULT_SCHEDULE[stage]) {
+    return { ...CONFIG.DEFAULT_SCHEDULE[stage] };
+  }
+  return {};
+};
+
+window.saveEventScheduleMap = function(map, stage = "prelim") {
+  const storageKey = `dcps_event_dates_${stage}`;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(map));
+  } catch (e) {}
+  if (!window._scheduleCache) window._scheduleCache = {};
+  window._scheduleCache[stage] = { ...map };
+};
+
+window.getEventDate = function(eventName, stage = "prelim") {
+  if (!eventName) return typeof getDefaultCompDate === "function" ? getDefaultCompDate() : "115.11.10";
+  const norm = eventName.replace(/\s+/g, "").replace(/(預賽名單|決賽名單|預賽成績|決賽成績|參賽名單)$/, "");
+  const map = window.getEventScheduleMap(stage);
+
+  if (map[norm]) return map[norm];
+
+  for (const key of Object.keys(map)) {
+    if (norm === key || norm.includes(key) || key.includes(norm)) {
+      return map[key];
+    }
+  }
+
+  if (stage === "prelim") {
+    if (norm.includes("60公尺") && (norm.includes("三年級") || norm.includes("四年級"))) return "115.10.21";
+    if (norm.includes("100公尺") && (norm.includes("三年級") || norm.includes("四年級"))) return "115.10.27";
+    if (norm.includes("100公尺") && (norm.includes("五年級") || norm.includes("六年級"))) return "115.10.28";
+    if (norm.includes("200公尺") && (norm.includes("五年級") || norm.includes("六年級"))) return "115.10.30";
+  } else if (stage === "finals") {
+    if ((norm.includes("三年級") || norm.includes("四年級")) && (norm.includes("60公尺") || norm.includes("100公尺"))) return "115.11.10";
+    if ((norm.includes("五年級") || norm.includes("六年級")) && (norm.includes("100公尺") || norm.includes("200公尺"))) return "115.11.13";
+  }
+
+  return typeof getDefaultCompDate === "function" ? getDefaultCompDate() : "115.11.10";
+};
+
+// 16 個標準競賽項目 (依年級與類別排列)
+const STANDARD_16_EVENTS = [
+  { grade: "三年級", cat: "女生組", name: "三年級女生組60公尺" },
+  { grade: "三年級", cat: "男生組", name: "三年級男生組60公尺" },
+  { grade: "四年級", cat: "女生組", name: "四年級女生組60公尺" },
+  { grade: "四年級", cat: "男生組", name: "四年級男生組60公尺" },
+  { grade: "三年級", cat: "女生組", name: "三年級女生組100公尺" },
+  { grade: "三年級", cat: "男生組", name: "三年級男生組100公尺" },
+  { grade: "四年級", cat: "女生組", name: "四年級女生組100公尺" },
+  { grade: "四年級", cat: "男生組", name: "四年級男生組100公尺" },
+  { grade: "五年級", cat: "女生組", name: "五年級女生組100公尺" },
+  { grade: "五年級", cat: "男生組", name: "五年級男生組100公尺" },
+  { grade: "六年級", cat: "女生組", name: "六年級女生組100公尺" },
+  { grade: "六年級", cat: "男生組", name: "六年級男生組100公尺" },
+  { grade: "五年級", cat: "女生組", name: "五年級女生組200公尺" },
+  { grade: "五年級", cat: "男生組", name: "五年級男生組200公尺" },
+  { grade: "六年級", cat: "女生組", name: "六年級女生組200公尺" },
+  { grade: "六年級", cat: "男生組", name: "六年級男生組200公尺" }
+];
+
+window.renderScheduleTableRows = function() {
+  const tbodyPrelim = document.getElementById("schedulePrelimTbody");
+  const tbodyFinals = document.getElementById("scheduleFinalsTbody");
+
+  if (tbodyPrelim) {
+    tbodyPrelim.innerHTML = STANDARD_16_EVENTS.map(item => {
+      const curDate = window.getEventDate(item.name, "prelim");
+      return `
+        <tr>
+          <td><span class="badge ${item.grade.includes('三') || item.grade.includes('四') ? 'badge-q' : 'badge-gold'}">${item.grade}</span></td>
+          <td>${item.cat}</td>
+          <td><strong>${item.name}</strong></td>
+          <td>
+            <input type="text" class="schedule-input-prelim" data-event="${item.name}" value="${curDate}"
+                   style="width: 140px; font-weight: 700; padding: 0.35rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 4px;">
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  if (tbodyFinals) {
+    tbodyFinals.innerHTML = STANDARD_16_EVENTS.map(item => {
+      const curDate = window.getEventDate(item.name, "finals");
+      return `
+        <tr>
+          <td><span class="badge ${item.grade.includes('三') || item.grade.includes('四') ? 'badge-q' : 'badge-gold'}">${item.grade}</span></td>
+          <td>${item.cat}</td>
+          <td><strong>${item.name}</strong></td>
+          <td>
+            <input type="text" class="schedule-input-finals" data-event="${item.name}" value="${curDate}"
+                   style="width: 140px; font-weight: 700; padding: 0.35rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 4px;">
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+};
+
+window.openScheduleModal = function() {
+  const modal = document.getElementById("scheduleModal");
+  if (!modal) return;
+  window.renderScheduleTableRows();
+  modal.style.display = "flex";
+};
+
+window.closeScheduleModal = function() {
+  const modal = document.getElementById("scheduleModal");
+  if (modal) modal.style.display = "none";
+};
+
+window.switchScheduleTab = function(tabName) {
+  const tabPrelim = document.getElementById("btnTabSchedulePrelim");
+  const tabFinals = document.getElementById("btnTabScheduleFinals");
+  const secPrelim = document.getElementById("schedulePrelimSection");
+  const secFinals = document.getElementById("scheduleFinalsSection");
+
+  if (tabName === "prelim") {
+    if (tabPrelim) tabPrelim.className = "btn btn-primary";
+    if (tabFinals) tabFinals.className = "btn btn-outline";
+    if (secPrelim) secPrelim.style.display = "block";
+    if (secFinals) secFinals.style.display = "none";
+  } else {
+    if (tabPrelim) tabPrelim.className = "btn btn-outline";
+    if (tabFinals) tabFinals.className = "btn btn-primary";
+    if (secPrelim) secPrelim.style.display = "none";
+    if (secFinals) secFinals.style.display = "block";
+  }
+};
+
+window.applyPresetSchedule = function(stage, presetType, dateVal) {
+  const selector = stage === "prelim" ? ".schedule-input-prelim" : ".schedule-input-finals";
+  const inputs = document.querySelectorAll(selector);
+  inputs.forEach(input => {
+    const ev = input.dataset.event || "";
+    let match = false;
+    if (presetType === "grade34_60") {
+      match = (ev.includes("三年級") || ev.includes("四年級")) && ev.includes("60公尺");
+    } else if (presetType === "grade34_100") {
+      match = (ev.includes("三年級") || ev.includes("四年級")) && ev.includes("100公尺");
+    } else if (presetType === "grade56_100") {
+      match = (ev.includes("五年級") || ev.includes("六年級")) && ev.includes("100公尺");
+    } else if (presetType === "grade56_200") {
+      match = (ev.includes("五年級") || ev.includes("六年級")) && ev.includes("200公尺");
+    } else if (presetType === "grade34_all") {
+      match = ev.includes("三年級") || ev.includes("四年級");
+    } else if (presetType === "grade56_all") {
+      match = ev.includes("五年級") || ev.includes("六年級");
+    }
+    if (match) {
+      input.value = dateVal;
+    }
+  });
+  if (typeof showStatus === "function") {
+    showStatus(`⚡ 已快速帶入賽程日期：${dateVal}`, "info");
+  }
+};
+
+window.resetOfficialSchedule = function() {
+  if (!confirm("確定要重設為大庄國小 71 週年官方預設賽程日期嗎？")) return;
+  if (typeof CONFIG !== "undefined" && CONFIG.DEFAULT_SCHEDULE) {
+    window.saveEventScheduleMap(CONFIG.DEFAULT_SCHEDULE.prelim, "prelim");
+    window.saveEventScheduleMap(CONFIG.DEFAULT_SCHEDULE.finals, "finals");
+  }
+  window.renderScheduleTableRows();
+  alert("🔄 已重設為官方最新排程日期！");
+  if (typeof showStatus === "function") {
+    showStatus("🔄 已重設為官方最新排程日期！", "info");
+  }
+};
+
+window.saveScheduleDates = function() {
+  try {
+    const prelimMap = {};
+    document.querySelectorAll(".schedule-input-prelim").forEach(input => {
+      const ev = input.dataset.event;
+      if (ev) prelimMap[ev] = input.value.trim();
+    });
+    window.saveEventScheduleMap(prelimMap, "prelim");
+
+    const finalsMap = {};
+    document.querySelectorAll(".schedule-input-finals").forEach(input => {
+      const ev = input.dataset.event;
+      if (ev) finalsMap[ev] = input.value.trim();
+    });
+    window.saveEventScheduleMap(finalsMap, "finals");
+
+    // 即時刷新畫面上現有的公告紙日期標籤
+    document.querySelectorAll(".notice-date-display").forEach(el => {
+      const ev = el.dataset.event;
+      const stage = el.dataset.stage || "prelim";
+      if (ev) {
+        el.innerText = window.getEventDate(ev, stage);
+      }
+    });
+
+    // 重新渲染公告紙與前台名單
+    try {
+      if (typeof state !== "undefined" && state.seededGroups && state.seededGroups.length > 0 && typeof renderPrelimNoticePaper === "function") {
+        renderPrelimNoticePaper();
+      }
+      if (typeof renderPublicNoticeView === "function") {
+        renderPublicNoticeView();
+      }
+    } catch (renderErr) {
+      console.warn("渲染公告紙時提示：", renderErr);
+    }
+
+    // 關閉彈窗
+    window.closeScheduleModal();
+
+    // 彈出確認視窗與狀態列提示
+    alert("✅ 賽程日期排程已成功儲存並同步套用至全系統！");
+    if (typeof showStatus === "function") {
+      showStatus("🎉 賽程日期排程已儲存並同步套用至全系統！", "success");
+    }
+  } catch (err) {
+    console.error("儲存賽程排程失敗", err);
+    alert("儲存時發生錯誤：" + err.message);
+  }
+};
+
+function initScheduleModal() {
+  const modal = document.getElementById("scheduleModal");
+  const btnOpen = document.getElementById("btnOpenScheduleModal");
+  const btnClose = document.getElementById("btnCloseScheduleModal");
+  const btnCancel = document.getElementById("btnCancelScheduleModal");
+  const btnSave = document.getElementById("btnSaveScheduleModal");
+  const btnReset = document.getElementById("btnResetOfficialSchedule");
+
+  const tabPrelim = document.getElementById("btnTabSchedulePrelim");
+  const tabFinals = document.getElementById("btnTabScheduleFinals");
+
+  if (!modal) return;
+
+  if (btnOpen) btnOpen.addEventListener("click", window.openScheduleModal);
+  if (btnClose) btnClose.addEventListener("click", window.closeScheduleModal);
+  if (btnCancel) btnCancel.addEventListener("click", window.closeScheduleModal);
+  if (btnSave) btnSave.addEventListener("click", window.saveScheduleDates);
+  if (btnReset) btnReset.addEventListener("click", window.resetOfficialSchedule);
+
+  if (tabPrelim) tabPrelim.addEventListener("click", () => window.switchScheduleTab("prelim"));
+  if (tabFinals) tabFinals.addEventListener("click", () => window.switchScheduleTab("finals"));
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) window.closeScheduleModal();
+  });
 }
 
 /**
@@ -1767,13 +2039,14 @@ function renderPrelimNotice() {
       </div>
 
       ${page.groups.map((group, gIdx) => {
+        const groupDate = getEventDate(group.title, "prelim");
         const formattedTitle = group.title.replace(/(\d+)\s*公尺/, "$1 公尺");
         const subTitleText = formattedTitle.endsWith("預賽名單") ? formattedTitle : `${formattedTitle}預賽名單`;
         return `
         <div class="official-competition-section ${gIdx > 0 ? 'mt-2' : ''}">
           <div class="official-sub-bar">
             <span class="sub-title-left">${subTitleText}</span>
-            <span class="sub-title-right">日期 <span class="notice-date-display">${compDate}</span></span>
+            <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="prelim">${groupDate}</span></span>
           </div>
 
           ${group.heats.map(heat => `
@@ -2121,13 +2394,14 @@ function renderPrelimScoreNoticePaper() {
       </div>
 
       ${page.groups.map((group, gIdx) => {
+        const groupDate = getEventDate(group.title, "prelim");
         const formattedTitle = group.title.replace(/(\d+)\s*公尺/, "$1 公尺");
         const subTitleText = formattedTitle.endsWith("預賽名單") ? formattedTitle : `${formattedTitle}預賽名單`;
         return `
         <div class="official-competition-section ${gIdx > 0 ? 'mt-2' : ''}">
           <div class="official-sub-bar">
             <span class="sub-title-left">${subTitleText}</span>
-            <span class="sub-title-right">日期 <span class="notice-date-display">${compDate}</span></span>
+            <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="prelim">${groupDate}</span></span>
           </div>
 
           ${group.heats.map(heat => `
@@ -2238,6 +2512,7 @@ function renderFinalsRosterNoticePaper() {
       </div>
 
       ${page.groups.map((group, gIdx) => {
+        const eventDate = getEventDate(group.title, "finals");
         const formattedTitle = group.title.replace(/(\d+)\s*公尺/, "$1 公尺");
         const subTitleText = formattedTitle.endsWith("決賽名單") ? formattedTitle : `${formattedTitle.replace(/預賽名單$/, "")}決賽名單`;
         const finalists = group.finalists || [];
@@ -2246,7 +2521,7 @@ function renderFinalsRosterNoticePaper() {
         <div class="official-competition-section ${gIdx > 0 ? 'mt-2' : ''}">
           <div class="official-sub-bar">
             <span class="sub-title-left">${subTitleText}</span>
-            <span class="sub-title-right">日期 <span class="notice-date-display">${compDate}</span></span>
+            <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="finals">${eventDate}</span></span>
           </div>
 
           <table class="official-seeding-table">
@@ -2311,6 +2586,7 @@ function renderFinalsScoreNoticePaper() {
       </div>
 
       ${page.groups.map((group, gIdx) => {
+        const eventDate = getEventDate(group.title, "finals");
         const formattedTitle = group.title.replace(/(\d+)\s*公尺/, "$1 公尺");
         const subTitleText = formattedTitle.endsWith("決賽名單") ? formattedTitle : `${formattedTitle.replace(/預賽名單$/, "")}決賽名單`;
         const finalists = group.finalists || [];
@@ -2319,7 +2595,7 @@ function renderFinalsScoreNoticePaper() {
         <div class="official-competition-section ${gIdx > 0 ? 'mt-2' : ''}">
           <div class="official-sub-bar">
             <span class="sub-title-left">${subTitleText}</span>
-            <span class="sub-title-right">日期 <span class="notice-date-display">${compDate}</span></span>
+            <span class="sub-title-right">日期 <span class="notice-date-display" data-event="${group.title}" data-stage="finals">${eventDate}</span></span>
           </div>
 
           <table class="official-seeding-table">
