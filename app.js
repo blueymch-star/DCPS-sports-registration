@@ -42,6 +42,20 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+/**
+ * 離線備援密碼雜湊檢查 (SHA-256 不可逆校驗，完全避免前端明文密碼殘留)
+ */
+async function verifyOfflineHash(str) {
+  try {
+    if (!window.crypto || !window.crypto.subtle) return false;
+    const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    return hash === "aaaa9a15028622a950bf7fb80cd1ce6230183b6ce0e05013e9b1ce6723b6a935";
+  } catch (e) {
+    return false;
+  }
+}
+
 // 全域狀態
 const state = {
   adminToken: "",               // 管理員會話金鑰
@@ -281,8 +295,9 @@ function initRoleAndModal() {
         }
       }
     } catch (err) {
-      // 網路連線中斷或離線環境備援檢查
-      if (inputVal === "183618") {
+      // 網路連線中斷或離線環境備援檢查 (SHA-256 雜湊校驗，完全避免前端明文密碼殘留)
+      const isFallbackValid = await verifyOfflineHash(inputVal);
+      if (isFallbackValid) {
         state.adminToken = inputVal;
         try { sessionStorage.setItem("dcps_admin_token", inputVal); } catch(e) {}
         hideModal();
@@ -855,7 +870,8 @@ async function loadRegistrationsFromCloud(showNotify = false) {
   }
 
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getRegistrations`);
+    const tokenParam = getAdminToken() ? `&adminToken=${encodeURIComponent(getAdminToken())}` : "";
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getRegistrations${tokenParam}`);
     const json = await res.json();
 
     if (json.status === "success" && Array.isArray(json.data)) {
