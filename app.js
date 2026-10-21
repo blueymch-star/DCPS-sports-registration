@@ -981,6 +981,10 @@ function restoreSeedingFromLocalStorage() {
         renderPublicNoticeView();
         const btnSave = document.getElementById("btnSaveSeedingCloud");
         if (btnSave) btnSave.style.display = "inline-flex";
+        if (state.seededGroups && state.seededGroups.some(g => g.scoresCompleted)) {
+          const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+          if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
+        }
         return true;
       }
     }
@@ -1104,6 +1108,13 @@ async function loadSeedingFromCloud(showNotify = false) {
 
         const btnSave = document.getElementById("btnSaveSeedingCloud");
         if (btnSave) btnSave.style.display = "inline-flex";
+        if (state.seededGroups && state.seededGroups.some(g => g.scoresCompleted)) {
+          const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+          if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
+        }
+
+        // 嘗試自雲端載入預賽成績與晉級
+        loadPrelimResultsFromCloud(false).catch(() => {});
 
         if (showNotify) {
           showStatus(`✅ 成功從雲端同步 ${state.seededGroups.length} 個項目的預賽分組名冊！`, "success");
@@ -1153,6 +1164,8 @@ function resetAllSystemData() {
   }
   const prelimScoreNoticeSection = document.getElementById("prelimScoreNoticeSection");
   if (prelimScoreNoticeSection) prelimScoreNoticeSection.style.display = "none";
+  const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+  if (btnSavePrelim) btnSavePrelim.style.display = "none";
   const prelimScorePaper = document.getElementById("prelimScoreNoticePaper");
   if (prelimScorePaper) prelimScorePaper.innerHTML = "";
   const finalsRosterPaper = document.getElementById("finalsRosterNoticePaper");
@@ -1285,6 +1298,10 @@ function publishPrelimScore() {
   saveSeedingToLocalStorage();
   updatePublishControlUI();
   renderPublicNoticeView();
+  // 若已具備管理員權限，背景同步儲存預賽成績至 Google 試算表
+  if (getAdminToken()) {
+    savePrelimResultsToCloud({ silent: true }).catch(() => {});
+  }
   showStatus("📢 預賽完賽成績公告與決賽分組名冊已成功發布至前台！", "success");
   alert("🎉 預賽成績公告與決賽分組名冊已成功發布至前台！\n全校師生現在可以在前台查看與列印這兩份公告。");
 }
@@ -2427,6 +2444,192 @@ async function saveSeedingToCloud() {
 // ==========================================
 // 3. 預賽成績登錄與決賽晉級判定
 // ==========================================
+
+async function savePrelimResultsToCloud(options = {}) {
+  const isSilent = options && options.silent === true;
+  const allResults = [];
+  if (state.seededGroups) {
+    state.seededGroups.forEach(group => {
+      // 確保各組若已有成績則計算晉級判定
+      if (group.scoresCompleted || (group.heats && group.heats.some(h => h.lanes.some(l => l.prelimScore !== undefined && l.prelimScore !== "")))) {
+        calculateQualifiersForGroup(group);
+      }
+      if (group.heats) {
+        group.heats.forEach(heat => {
+          if (heat.lanes) {
+            heat.lanes.forEach(l => {
+              if (l.athlete) {
+                const rawScore = l.prelimScore;
+                let scoreVal = "";
+                if (typeof rawScore === "number") {
+                  scoreVal = rawScore;
+                } else if (rawScore) {
+                  scoreVal = String(rawScore);
+                }
+
+                let rankStr = "";
+                if (l.heatRank && l.heatRank !== 99) {
+                  rankStr = `第 ${l.heatRank} 名`;
+                } else if (rawScore === "未出賽") {
+                  rankStr = "未出賽";
+                }
+
+                let qualStr = "";
+                if (l.qualified) {
+                  if (l.qualifyType && l.qualifyType.startsWith("Q")) {
+                    qualStr = "晉級 (Q)";
+                  } else {
+                    qualStr = "擇優晉級 (q)";
+                  }
+                }
+
+                allResults.push({
+                  event: group.title,
+                  heat: `第 ${heat.heatNum} 組`,
+                  lane: `${l.lane} 道`,
+                  className: l.athlete.className || "",
+                  studentNo: l.athlete.studentNo || "",
+                  name: l.athlete.name || "",
+                  resultScore: scoreVal,
+                  heatRank: rankStr,
+                  qualified: qualStr
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // 檢查是否有至少一筆已輸入成績
+  const hasEnteredScores = allResults.some(r => r.resultScore !== "");
+  if (!hasEnteredScores) {
+    if (!isSilent) {
+      alert("尚未登錄任何預賽成績！請先輸入選手預賽成績並點擊「🎯 判定晉級並產出預賽成績公告」。");
+    }
+    return false;
+  }
+
+  showStatus("正在將全校預賽成績與晉級名單寫入 Google 試算表...", "info");
+
+  try {
+    saveSeedingToLocalStorage();
+    const res = await fetch(CONFIG.GAS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "savePrelimResults",
+        results: allResults,
+        adminToken: getAdminToken()
+      })
+    });
+    const json = await res.json();
+    if (json.status === "success") {
+      showStatus("🎉 預賽成績與晉級狀態已成功儲存至 Google 試算表！", "success");
+      if (!isSilent) {
+        alert("🎉 預賽完賽成績與晉級名冊已成功儲存至 Google 試算表！\n已同步更新至雲端工作表「預賽成績與晉級」。");
+      }
+      if (json.spreadsheetUrl) {
+        state.spreadsheetUrl = json.spreadsheetUrl;
+        const link = document.getElementById("cloudSheetLink");
+        if (link) {
+          link.href = json.spreadsheetUrl;
+          link.style.display = "inline-flex";
+        }
+      }
+      return true;
+    } else {
+      showStatus("儲存失敗：" + (json.message || "未知錯誤"), "error");
+      if (!isSilent) {
+        alert("儲存至 Google 試算表失敗：" + (json.message || "未知錯誤"));
+      }
+      return false;
+    }
+  } catch (err) {
+    showStatus("預賽成績已完整保留於本地。若需寫入雲端請確認 Google Apps Script 授權與網路連線。", "error");
+    if (!isSilent) {
+      alert("預賽成績已保留於本地快取中。若需寫入雲端，請確認已點擊右上角「🔑 雲端授權」輸入管理員密碼。");
+    }
+    return false;
+  }
+}
+
+async function loadPrelimResultsFromCloud(showNotify = false) {
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getPrelimResults`);
+    const json = await res.json();
+    if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
+      if (!state.seededGroups || state.seededGroups.length === 0) return false;
+
+      let matchedCount = 0;
+      json.data.forEach(item => {
+        const itemEvent = (item.event || "").trim();
+        const itemHeatNum = parseInt(String(item.heat).replace(/\D/g, ""), 10);
+        const itemLane = parseInt(String(item.lane).replace(/\D/g, ""), 10);
+        const itemScore = item.resultScore;
+
+        state.seededGroups.forEach(group => {
+          if (group.title === itemEvent || group.event === itemEvent) {
+            if (group.heats) {
+              group.heats.forEach(heat => {
+                if (heat.heatNum === itemHeatNum && heat.lanes) {
+                  heat.lanes.forEach(l => {
+                    if (l.lane === itemLane && l.athlete && l.athlete.name === item.name) {
+                      const numVal = parseFloat(String(itemScore).replace(/[^\d.]/g, ""));
+                      l.prelimScore = (!isNaN(numVal) && numVal > 0) ? numVal : itemScore;
+                      group.scoresCompleted = true;
+                      matchedCount++;
+                    }
+                  });
+                }
+              });
+            }
+          }
+        });
+      });
+
+      if (matchedCount > 0) {
+        // 重新判定晉級與決賽 6 強
+        state.seededGroups.forEach(group => {
+          if (group.scoresCompleted) {
+            const q = calculateQualifiersForGroup(group);
+            const qa = q.filter(r => r.qualified && typeof r.prelimScore === "number")
+                        .sort((a, b) => a.prelimScore - b.prelimScore);
+            group.finalists = qa.map((item, idx) => ({
+              ...item,
+              finalLane: FINALS_LANE_PRIORITY_6[idx],
+              seedPriority: idx + 1
+            })).sort((a, b) => a.finalLane - b.finalLane);
+          }
+        });
+
+        if (state.activeSeededGroup && state.activeSeededGroup.finalists) {
+          state.finalists = state.activeSeededGroup.finalists;
+        }
+
+        saveSeedingToLocalStorage();
+        renderPrelimScoreInput();
+        renderPrelimScoreNoticePaper();
+        renderFinalsRosterNoticePaper();
+        renderFinalsScoreInput();
+        const prelimSection = document.getElementById("prelimScoreNoticeSection");
+        if (prelimSection) prelimSection.style.display = "block";
+        const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+        if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
+
+        if (showNotify) {
+          showStatus(`✅ 成功從雲端同步 ${matchedCount} 筆預賽成績與晉級資料！`, "success");
+        }
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("自動從雲端獲取預賽成績失敗：", err);
+  }
+  return false;
+}
+
 function initPrelimScoringEvents() {
   document.getElementById("btnCalculateQualifiers").addEventListener("click", calculateQualifiers);
   document.getElementById("btnFillSamplePrelimScores").addEventListener("click", fillSamplePrelimScores);
@@ -2435,6 +2638,11 @@ function initPrelimScoringEvents() {
   if (printScoreFromTab3) {
     printScoreFromTab3.addEventListener("click", printPrelimScoresNotice);
   }
+
+  const btnSavePrelim1 = document.getElementById("btnSavePrelimResultsCloud");
+  if (btnSavePrelim1) btnSavePrelim1.addEventListener("click", () => savePrelimResultsToCloud());
+  const btnSavePrelim2 = document.getElementById("btnSavePrelimResultsCloud2");
+  if (btnSavePrelim2) btnSavePrelim2.addEventListener("click", () => savePrelimResultsToCloud());
 
   const btnPub = document.getElementById("btnPublishPrelimScore");
   if (btnPub) btnPub.addEventListener("click", publishPrelimScore);
@@ -2526,8 +2734,12 @@ function renderPrelimScoreInput() {
         renderFinalsLaneTable();
         renderPrelimScoreNoticePaper();
         document.getElementById("prelimScoreNoticeSection").style.display = "block";
+        const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+        if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
       } else {
         document.getElementById("prelimScoreNoticeSection").style.display = "none";
+        const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+        if (btnSavePrelim) btnSavePrelim.style.display = "none";
       }
     });
   }
@@ -2575,6 +2787,8 @@ function fillSamplePrelimScores() {
   renderFinalsRosterNoticePaper();
   renderFinalsScoreInput();
   document.getElementById("prelimScoreNoticeSection").style.display = "block";
+  const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+  if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
   showStatus("⚡ 已為同年級同項目（女生組＋男生組）填入示範預賽成績，並成功排定決賽 6 強名單！", "success");
 }
 
@@ -2656,6 +2870,8 @@ function calculateQualifiers() {
   renderFinalsRosterNoticePaper();
   renderFinalsScoreInput();
   document.getElementById("prelimScoreNoticeSection").style.display = "block";
+  const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
+  if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
   showStatus(`🎉 預賽成績登錄與晉級判定完成！已產出預賽完賽公告與決賽名單。請校對無誤後點擊「📢 公告預賽成績與決賽名冊至前台」！`, "success");
 }
 

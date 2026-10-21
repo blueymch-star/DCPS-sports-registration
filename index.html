@@ -490,6 +490,7 @@
           <div class="qualify-rules-bar">
             <span><strong>晉級規則：</strong> 各組第 <strong>1</strong> 名直接晉級 (大 Q) ＋ 擇優前 <strong>3</strong> 名 (小 q)，共 <strong>6</strong> 人晉級決賽。</span>
             <button id="btnCalculateQualifiers" class="btn btn-warning">🎯 判定晉級並產出預賽成績公告</button>
+            <button id="btnSavePrelimResultsCloud" class="btn btn-primary" style="display:none;">☁️ 儲存預賽成績至 Google 試算表</button>
           </div>
         </div>
       </div>
@@ -510,6 +511,7 @@
             <button id="btnPrintFinalsNotice" class="btn btn-outline">🖨️ 列印決賽分組參賽名冊</button>
             <button type="button" id="btnDownloadStage2Word" class="btn btn-warning-sm" onclick="downloadStage2PrelimResultsWord()" title="下載含預賽完賽成績之預賽名單 Word 檔">📥 下載預賽成績 Word</button>
             <button type="button" id="btnDownloadStage3Word" class="btn btn-primary-sm" onclick="downloadStage3FinalsRosterWord()" title="下載已編排決賽賽道之決賽名單 Word 檔 (成績空白)">📥 下載決賽名單 Word</button>
+            <button id="btnSavePrelimResultsCloud2" class="btn btn-primary" title="將全校預賽完賽成績與晉級狀態儲存至 Google 試算表">☁️ 儲存預賽成績至 Google 試算表</button>
             <div class="publish-control-group">
               <button id="btnPublishPrelimScore" class="btn btn-publish">📢 公告預賽成績與決賽名冊至前台</button>
               <button id="btnUnpublishPrelimScore" class="btn btn-unpublish" style="display:none;">🗑️ 刪除/撤回預賽成績公告</button>
@@ -820,8 +822,8 @@
 
   <script src="libs/jszip.min.js"></script>
   <script src="libs/xlsx.full.min.js"></script>
-  <script src="config.js?v=20261013h"></script>
-  <script src="exportDocs.js?v=20261013h"></script>
-  <script src="app.js?v=20261013h"></script>
+  <script src="config.js?v=20261021a"></script>
+  <script src="exportDocs.js?v=20261021a"></script>
+  <script src="app.js?v=20261021a"></script>
 </body>
 </html>
