@@ -969,7 +969,9 @@ function restoreSeedingFromLocalStorage() {
         }
         renderPrelimNotice();
         renderPrelimScoreInput();
-        if (state.published.prelimScore) {
+        if (state.seededGroups.some(g => g.scoresCompleted) || state.published.prelimScore) {
+          const prelimSec = document.getElementById("prelimScoreNoticeSection");
+          if (prelimSec) prelimSec.style.display = "block";
           renderPrelimScoreNoticePaper();
           renderFinalsRosterNoticePaper();
           renderFinalsScoreInput();
