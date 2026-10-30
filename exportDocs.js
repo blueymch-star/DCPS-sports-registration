@@ -123,10 +123,17 @@ async function getPrelimDataMap() {
           if (score && !isNaN(parseFloat(score)) && isFinite(score)) {
             score = parseFloat(score).toFixed(2);
           }
+          let isQual = !!l.qualified;
+          if (!isQual && g.finalists && Array.isArray(g.finalists)) {
+            if (g.finalists.some(f => f.athlete && f.athlete.name === athlete.name && f.athlete.className === athlete.className)) {
+              isQual = true;
+            }
+          }
           map.set(`${evName}_${heatNum}_${laneNum}`, {
             className: athlete.className || "",
             name: athlete.name || "",
-            score: score
+            score: score,
+            qualified: isQual
           });
         });
       });
@@ -148,10 +155,12 @@ async function getPrelimDataMap() {
           if (score && !isNaN(parseFloat(score)) && isFinite(score)) {
             score = parseFloat(score).toFixed(2);
           }
+          const isQual = !!(item.qualified && (String(item.qualified).includes("晉級") || String(item.qualified).includes("Q") || String(item.qualified).includes("q")));
           map.set(`${evName}_${heatNum}_${laneNum}`, {
             className: item.className || "",
             name: item.name || "",
-            score: score
+            score: score,
+            qualified: isQual
           });
         });
         return map;
@@ -287,6 +296,65 @@ function setXmlCellText(cell, text, isBold = false, fontSize = 26) {
   r.appendChild(rPr);
 
   const t = cell.ownerDocument.createElementNS(ns, "w:t");
+  t.textContent = text;
+  r.appendChild(t);
+
+  p.appendChild(r);
+}
+
+/**
+ * 依據 XML 操作設定 Word 段落文字與樣式（用於「●表示晉級決賽」等提示文字）
+ */
+function setXmlParagraphText(p, text, fontSize = 28, isBold = false) {
+  const ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const existingRs = Array.from(p.getElementsByTagNameNS(ns, "r"));
+  existingRs.forEach(r => p.removeChild(r));
+
+  if (!text) return;
+
+  let pPr = p.getElementsByTagNameNS(ns, "pPr")[0];
+  if (!pPr) {
+    pPr = p.ownerDocument.createElementNS(ns, "w:pPr");
+    p.insertBefore(pPr, p.firstChild);
+  }
+  let spacing = pPr.getElementsByTagNameNS(ns, "spacing")[0];
+  if (!spacing) {
+    spacing = p.ownerDocument.createElementNS(ns, "w:spacing");
+    pPr.appendChild(spacing);
+  }
+  spacing.setAttributeNS(ns, "w:line", "400");
+  spacing.setAttributeNS(ns, "w:lineRule", "exact");
+
+  const r = p.ownerDocument.createElementNS(ns, "w:r");
+  const rPr = p.ownerDocument.createElementNS(ns, "w:rPr");
+
+  const rFonts = p.ownerDocument.createElementNS(ns, "w:rFonts");
+  rFonts.setAttributeNS(ns, "w:ascii", "標楷體");
+  rFonts.setAttributeNS(ns, "w:eastAsia", "標楷體");
+  rFonts.setAttributeNS(ns, "w:hAnsi", "標楷體");
+  rFonts.setAttributeNS(ns, "w:hint", "eastAsia");
+  rPr.appendChild(rFonts);
+
+  const col = p.ownerDocument.createElementNS(ns, "w:color");
+  col.setAttributeNS(ns, "w:val", "000000");
+  rPr.appendChild(col);
+
+  const sz = p.ownerDocument.createElementNS(ns, "w:sz");
+  sz.setAttributeNS(ns, "w:val", String(fontSize));
+  rPr.appendChild(sz);
+
+  const szCs = p.ownerDocument.createElementNS(ns, "w:szCs");
+  szCs.setAttributeNS(ns, "w:val", String(fontSize));
+  rPr.appendChild(szCs);
+
+  if (isBold) {
+    const b = p.ownerDocument.createElementNS(ns, "w:b");
+    rPr.appendChild(b);
+  }
+
+  r.appendChild(rPr);
+
+  const t = p.ownerDocument.createElementNS(ns, "w:t");
   t.textContent = text;
   r.appendChild(t);
 
@@ -457,11 +525,19 @@ function generatePrelimHtmlDoc(dataMap, includeScores = false) {
             <th>成 績</th>
             ${laneColMap.map(l => {
               const item = dataMap.get(`${evName}_${heatIdx}_${l}`);
-              return `<td style="font-weight: bold;">${includeScores && item && item.score ? item.score : ""}</td>`;
+              let sText = (includeScores && item && item.score) ? item.score : "";
+              if (includeScores && item && item.qualified && sText && sText !== "未出賽" && sText !== "未完賽") {
+                sText = `●${sText}`;
+              }
+              return `<td style="font-weight: bold;">${sText}</td>`;
             }).join("")}
           </tr>
         </table>
       `;
+    }
+
+    if (includeScores) {
+      html += `<div style="font-size: 14pt; font-family: '標楷體'; margin-top: 4px; margin-bottom: 6px;">●表示晉級決賽</div>`;
     }
 
     html += `
@@ -652,11 +728,28 @@ async function downloadStage2PrelimResultsWord() {
               if (item && item.name) {
                 const displayName = `${item.className} ${item.name}`.trim();
                 setXmlCellText(row1Cells[colIdx], displayName, false, 26);
-                setXmlCellText(row2Cells[colIdx], item.score || "", true, 26);
+                let scoreText = item.score || "";
+                if (item.qualified && scoreText && scoreText !== "未出賽" && scoreText !== "未完賽") {
+                  scoreText = `●${scoreText}`;
+                }
+                setXmlCellText(row2Cells[colIdx], scoreText, true, 26);
               } else {
                 setXmlCellText(row1Cells[colIdx], "", false, 26);
                 setXmlCellText(row2Cells[colIdx], "", false, 26);
               }
+            }
+
+            // 若為該項目的第 3 組（最後一組），在後方的空白段落填入「●表示晉級決賽」
+            if (heatIdx === 3) {
+              let nextElem = tbl.nextSibling;
+              while (nextElem && (nextElem.nodeType !== 1 || (nextElem.localName !== "p" && nextElem.nodeName !== "w:p"))) {
+                nextElem = nextElem.nextSibling;
+              }
+              if (!nextElem) {
+                nextElem = xmlDoc.createElementNS(ns, "w:p");
+                tbl.parentNode.insertBefore(nextElem, tbl.nextSibling);
+              }
+              setXmlParagraphText(nextElem, "●表示晉級決賽", 28, false);
             }
           }
         });
@@ -940,7 +1033,22 @@ async function downloadAllCompetitionDocsZip() {
               for (const [laneStr, colIdx] of Object.entries(laneColMap)) {
                 const item = prelimMap.get(`${evName}_${heatIdx}_${laneStr}`);
                 setXmlCellText(r1[colIdx], item && item.name ? `${item.className} ${item.name}` : "", false, 26);
-                setXmlCellText(r2[colIdx], item && item.score ? item.score : "", true, 26);
+                let scoreText = item && item.score ? item.score : "";
+                if (item && item.qualified && scoreText && scoreText !== "未出賽" && scoreText !== "未完賽") {
+                  scoreText = `●${scoreText}`;
+                }
+                setXmlCellText(r2[colIdx], scoreText, true, 26);
+              }
+              if (heatIdx === 3) {
+                let nextElem = tables[tblIdx].nextSibling;
+                while (nextElem && (nextElem.nodeType !== 1 || (nextElem.localName !== "p" && nextElem.nodeName !== "w:p"))) {
+                  nextElem = nextElem.nextSibling;
+                }
+                if (!nextElem) {
+                  nextElem = xmlDoc.createElementNS(ns, "w:p");
+                  tables[tblIdx].parentNode.insertBefore(nextElem, tables[tblIdx].nextSibling);
+                }
+                setXmlParagraphText(nextElem, "●表示晉級決賽", 28, false);
               }
             }
           });

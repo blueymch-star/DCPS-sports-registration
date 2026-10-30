@@ -2100,28 +2100,31 @@ function calculateQualifiersForGroup(group) {
     heat.lanes.forEach(l => {
       const rawVal = l.prelimScore !== undefined && l.prelimScore !== null ? String(l.prelimScore).trim() : "";
       const val = parseFloat(rawVal);
-      const isDNS = rawVal === "未出賽" || rawVal === "DNS" || rawVal === "棄權" || rawVal === "";
+      const isDNS = rawVal === "未出賽" || rawVal === "DNS" || rawVal === "棄權";
+      const isDNF = rawVal === "未完賽" || rawVal === "DNF";
+      const isBlank = rawVal === "";
 
       heatAthletes.push({
         laneObj: l,
         athlete: l.athlete,
         heatNum: heat.heatNum,
         lane: l.lane,
-        prelimScore: isDNS ? (rawVal || "未出賽") : val,
-        isDNS: isDNS
+        prelimScore: isDNF ? "未完賽" : (isDNS ? "未出賽" : (isBlank ? "未出賽" : val)),
+        isDNS: isDNS || isBlank,
+        isDNF: isDNF
       });
     });
 
     // 依完賽秒數由快至慢排序組內正常完賽選手
-    const activeAthletes = heatAthletes.filter(x => !x.isDNS && typeof x.prelimScore === "number");
+    const activeAthletes = heatAthletes.filter(x => !x.isDNS && !x.isDNF && typeof x.prelimScore === "number");
     activeAthletes.sort((a, b) => a.prelimScore - b.prelimScore);
     activeAthletes.forEach((item, idx) => {
       item.heatRank = idx + 1;
       allResults.push(item);
     });
 
-    // 未出賽或缺賽選手
-    heatAthletes.filter(x => x.isDNS || typeof x.prelimScore !== "number").forEach(item => {
+    // 未出賽、未完賽或缺賽選手
+    heatAthletes.filter(x => x.isDNS || x.isDNF || typeof x.prelimScore !== "number").forEach(item => {
       item.heatRank = 99;
       item.qualified = false;
       item.qualifyType = "";
@@ -2130,14 +2133,14 @@ function calculateQualifiersForGroup(group) {
   });
 
   // 1. 各組第 1 名直接晉級（大 Q，每一組成績最優者必有 1 人直接晉級！）
-  const directQualifiers = allResults.filter(x => x.heatRank === 1 && !x.isDNS && typeof x.prelimScore === "number");
+  const directQualifiers = allResults.filter(x => x.heatRank === 1 && !x.isDNS && !x.isDNF && typeof x.prelimScore === "number");
   directQualifiers.forEach(x => {
     x.qualified = true;
     x.qualifyType = "Q (組第1名直接晉級)";
   });
 
   // 2. 擇優前 3 名晉級（小 q：在所有組別的第2名及之後選手中，取秒數最快的前 3 名）
-  const remaining = allResults.filter(x => x.heatRank > 1 && !x.isDNS && typeof x.prelimScore === "number")
+  const remaining = allResults.filter(x => x.heatRank > 1 && !x.isDNS && !x.isDNF && typeof x.prelimScore === "number")
                               .sort((a, b) => a.prelimScore - b.prelimScore);
   const timeQualifiers = remaining.slice(0, 3);
   timeQualifiers.forEach(x => {
@@ -2150,8 +2153,8 @@ function calculateQualifiersForGroup(group) {
     x.qualifyType = "";
   });
 
-  // 未出賽者確保為 false
-  allResults.filter(x => x.isDNS || typeof x.prelimScore !== "number").forEach(x => {
+  // 未出賽或未完賽者確保為 false
+  allResults.filter(x => x.isDNS || x.isDNF || typeof x.prelimScore !== "number").forEach(x => {
     x.qualified = false;
     x.qualifyType = "";
   });
@@ -2474,6 +2477,8 @@ async function savePrelimResultsToCloud(options = {}) {
                   rankStr = `第 ${l.heatRank} 名`;
                 } else if (rawScore === "未出賽") {
                   rankStr = "未出賽";
+                } else if (rawScore === "未完賽") {
+                  rankStr = "未完賽";
                 }
 
                 let qualStr = "";
@@ -2578,8 +2583,16 @@ async function loadPrelimResultsFromCloud(showNotify = false) {
                 if (heat.heatNum === itemHeatNum && heat.lanes) {
                   heat.lanes.forEach(l => {
                     if (l.lane === itemLane && l.athlete && l.athlete.name === item.name) {
-                      const numVal = parseFloat(String(itemScore).replace(/[^\d.]/g, ""));
-                      l.prelimScore = (!isNaN(numVal) && numVal > 0) ? numVal : itemScore;
+                      if (String(itemScore).includes("未完賽")) {
+                        l.prelimScore = "未完賽";
+                        l.isDNF = true;
+                      } else if (String(itemScore).includes("未出賽")) {
+                        l.prelimScore = "未出賽";
+                        l.isDNS = true;
+                      } else {
+                        const numVal = parseFloat(String(itemScore).replace(/[^\d.]/g, ""));
+                        l.prelimScore = (!isNaN(numVal) && numVal > 0) ? numVal : itemScore;
+                      }
                       group.scoresCompleted = true;
                       matchedCount++;
                     }
@@ -2711,12 +2724,12 @@ function renderPrelimScoreInput() {
                 <td>${typeof l.athlete.seedScore === 'number' ? l.athlete.seedScore.toFixed(2) : escapeHtml(l.athlete.seedScore)}s</td>
                 <td>
                   <input type="text" class="prelim-score-input"
-                         id="score_${heat.heatNum}_${l.lane}" placeholder="輸入秒數或未出賽"
+                         id="score_${heat.heatNum}_${l.lane}" placeholder="輸入秒數或未出賽/未完賽"
                          value="${l.prelimScore !== undefined ? l.prelimScore : ''}"
                          style="width: 140px; font-weight: 700; padding: 0.35rem 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px;">
                 </td>
-                <td id="rank_${heat.heatNum}_${l.lane}">${(l.prelimScore === '未出賽' || l.heatRank === 99) ? '<span class="text-muted">未出賽</span>' : (l.heatRank ? `<strong>第 ${l.heatRank} 名</strong>` : '-')}</td>
-                <td id="status_${heat.heatNum}_${l.lane}">${(l.prelimScore === '未出賽') ? '<span class="text-muted">未出賽</span>' : (l.qualified ? (l.qualifyType && l.qualifyType.startsWith('Q') ? '<span class="badge badge-q">晉級 (Q)</span>' : '<span class="badge badge-small-q">擇優晉級 (q)</span>') : (l.prelimScore !== undefined && l.prelimScore !== null && l.prelimScore !== '' ? '<span class="text-muted">未晉級</span>' : '-'))}</td>
+                <td id="rank_${heat.heatNum}_${l.lane}">${(l.prelimScore === '未完賽' || l.isDNF) ? '<span class="text-muted">未完賽</span>' : ((l.prelimScore === '未出賽' || l.isDNS) ? '<span class="text-muted">未出賽</span>' : (l.heatRank && l.heatRank !== 99 ? `<strong>第 ${l.heatRank} 名</strong>` : '-'))}</td>
+                <td id="status_${heat.heatNum}_${l.lane}">${(l.prelimScore === '未完賽' || l.isDNF) ? '<span class="text-muted">未完賽</span>' : ((l.prelimScore === '未出賽' || l.isDNS) ? '<span class="text-muted">未出賽</span>' : (l.qualified ? (l.qualifyType && l.qualifyType.startsWith('Q') ? '<span class="badge badge-q">晉級 (Q)</span>' : '<span class="badge badge-small-q">擇優晉級 (q)</span>') : (l.prelimScore !== undefined && l.prelimScore !== null && l.prelimScore !== '' ? '<span class="text-muted">未晉級</span>' : '-')))}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -2807,14 +2820,18 @@ function calculateQualifiers() {
       if (!inputEl) continue;
       const rawVal = inputEl.value.trim();
       const isDNS = rawVal === "未出賽" || rawVal === "DNS" || rawVal === "棄權";
+      const isDNF = rawVal === "未完賽" || rawVal === "DNF";
+      const isNonFinish = isDNS || isDNF;
       const val = parseFloat(rawVal);
 
-      if (!isDNS && (rawVal === "" || isNaN(val) || val <= 0)) {
-        alert(`請先為「第 ${heat.heatNum} 組 ${l.lane} 道 ${l.athlete.name}」填寫預賽成績（秒）或輸入『未出賽』！`);
+      if (!isNonFinish && (rawVal === "" || isNaN(val) || val <= 0)) {
+        alert(`請先為「第 ${heat.heatNum} 組 ${l.lane} 道 ${l.athlete.name}」填寫預賽成績（秒）或輸入『未出賽』/『未完賽』！`);
         inputEl.focus();
         return;
       }
-      l.prelimScore = isDNS ? "未出賽" : val;
+      l.prelimScore = isDNF ? "未完賽" : (isDNS ? "未出賽" : val);
+      l.isDNS = isDNS;
+      l.isDNF = isDNF;
     }
   }
 
@@ -2827,12 +2844,18 @@ function calculateQualifiers() {
     const rankEl = document.getElementById(`rank_${r.heatNum}_${r.lane}`);
     const statusEl = document.getElementById(`status_${r.heatNum}_${r.lane}`);
     if (rankEl) {
-      rankEl.innerHTML = (r.isDNS || typeof r.prelimScore !== "number")
-        ? `<span class="text-muted">未出賽</span>`
-        : `<strong>第 ${r.heatRank} 名</strong>`;
+      if (r.prelimScore === "未完賽" || r.isDNF) {
+        rankEl.innerHTML = `<span class="text-muted">未完賽</span>`;
+      } else if (r.prelimScore === "未出賽" || r.isDNS || typeof r.prelimScore !== "number") {
+        rankEl.innerHTML = `<span class="text-muted">未出賽</span>`;
+      } else {
+        rankEl.innerHTML = `<strong>第 ${r.heatRank} 名</strong>`;
+      }
     }
     if (statusEl) {
-      if (r.isDNS || typeof r.prelimScore !== "number") {
+      if (r.prelimScore === "未完賽" || r.isDNF) {
+        statusEl.innerHTML = `<span class="text-muted">未完賽</span>`;
+      } else if (r.prelimScore === "未出賽" || r.isDNS || typeof r.prelimScore !== "number") {
         statusEl.innerHTML = `<span class="text-muted">未出賽</span>`;
       } else if (r.qualified) {
         if (r.qualifyType && r.qualifyType.startsWith("Q")) {
@@ -2951,6 +2974,9 @@ function renderPrelimScoreNoticePaper() {
                       }
                       if (l.prelimScore === "未出賽") {
                         return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
+                      }
+                      if (l.prelimScore === "未完賽") {
+                        return `<td class="score-cell"><span class="text-muted">未完賽</span></td>`;
                       }
                       const scoreStr = typeof l.prelimScore === "number" ? l.prelimScore.toFixed(2) : l.prelimScore;
                       const text = l.qualified ? `●${scoreStr}` : `${scoreStr}`;
