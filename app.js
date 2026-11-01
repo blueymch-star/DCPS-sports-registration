@@ -60,11 +60,11 @@ async function verifyOfflineHash(str) {
 const state = {
   adminToken: "",               // 管理員會話金鑰
   currentRole: "teacher",       // 'teacher' (前台) | 'admin' (後台)
-  activePublicNotice: "finals-roster", // 'prelim-roster' | 'prelim-score' | 'finals-roster' | 'finals-score'
+  activePublicNotice: "prelim-roster", // 'prelim-roster' | 'prelim-score' | 'finals-roster' | 'finals-score'
   published: {
-    prelimRoster: false,        // 預賽分組名冊已結束/撤回
+    prelimRoster: false,        // 預賽分組名冊是否已發布
     prelimScore: false,         // 預賽完賽成績公告是否已發布
-    finalsRoster: true,         // 決賽分組名冊是否已發布 (當前主公告)
+    finalsRoster: false,        // 決賽分組名冊是否已發布
     finalsScore: false          // 決賽成績公告是否已發布
   },
   lockedClasses: {},           // 班級報名防竄改鎖定狀態: { "三甲": true, "六乙": false }
@@ -956,11 +956,6 @@ function restoreSeedingFromLocalStorage() {
     const savedPublished = localStorage.getItem(STORAGE_KEY_PUBLISHED);
     if (savedPublished) {
       const parsedPub = JSON.parse(savedPublished);
-      // 若本機快取仍停留在舊的預賽公告狀態，主動切換為決賽分組公告
-      if (parsedPub.prelimRoster === true && !parsedPub.finalsRoster) {
-        parsedPub.prelimRoster = false;
-        parsedPub.finalsRoster = true;
-      }
       state.published = Object.assign(state.published || {}, parsedPub);
     }
     const savedSeeded = localStorage.getItem(STORAGE_KEY_SEEDED);
@@ -974,7 +969,7 @@ function restoreSeedingFromLocalStorage() {
         }
         renderPrelimNotice();
         renderPrelimScoreInput();
-        if (state.seededGroups.some(g => g.scoresCompleted) || state.published.prelimScore || state.published.finalsRoster) {
+        if (state.seededGroups.some(g => g.scoresCompleted) || state.published.prelimScore) {
           const prelimSec = document.getElementById("prelimScoreNoticeSection");
           if (prelimSec) prelimSec.style.display = "block";
           renderPrelimScoreNoticePaper();
@@ -1098,11 +1093,11 @@ async function loadSeedingFromCloud(showNotify = false) {
           state.prelimHeats = state.activeSeededGroup.heats;
         }
 
-        // 預賽已完成，預賽分組名單撤回/刪除，前台正式公告決賽分組名單
+        // 雲端既然已經有體育組長同步上去的排道資料，預設將預賽名冊公告視為發布
+        // (若本機快取已有更細緻的 published 狀態則予以尊重保留)
         if (!state.published) state.published = {};
-        state.published.prelimRoster = false;
-        state.published.finalsRoster = true;
-        state.activePublicNotice = "finals-roster";
+        // 只要雲端有資料，前台一律發布開放查閱
+        state.published.prelimRoster = true;
 
         // 同步寫入本機快取
         saveSeedingToLocalStorage();
@@ -1111,6 +1106,7 @@ async function loadSeedingFromCloud(showNotify = false) {
         renderPrelimNotice();
         renderPrelimScoreInput();
         updatePublishControlUI();
+        renderPublicNoticeView();
 
         const btnSave = document.getElementById("btnSaveSeedingCloud");
         if (btnSave) btnSave.style.display = "inline-flex";
@@ -1119,14 +1115,11 @@ async function loadSeedingFromCloud(showNotify = false) {
           if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
         }
 
-        // 嘗試自雲端載入預賽成績並排定決賽 6 強名單
-        await loadPrelimResultsFromCloud(false);
-
-        // 確保決賽分組公文名冊渲染至前台看板
-        renderPublicNoticeView();
+        // 嘗試自雲端載入預賽成績與晉級
+        loadPrelimResultsFromCloud(false).catch(() => {});
 
         if (showNotify) {
-          showStatus(`✅ 成功從雲端同步決賽分組名冊（共 ${state.seededGroups.length} 個項目）！`, "success");
+          showStatus(`✅ 成功從雲端同步 ${state.seededGroups.length} 個項目的預賽分組名冊！`, "success");
         }
       }
     }
@@ -1469,28 +1462,11 @@ function renderPublicRegistrationTable() {
   `).join("");
 }
 
-function syncPublicNoticePillUI() {
-  const current = state.activePublicNotice || "finals-roster";
-  const pills = document.querySelectorAll(".public-notice-pill");
-  pills.forEach(p => {
-    p.classList.toggle("active", p.dataset.noticeType === current);
-  });
-  const infoText = document.getElementById("publicNoticeInfoText");
-  const titleMap = {
-    "prelim-roster": "📜 目前瀏覽：【預賽分組參賽名冊】",
-    "prelim-score": "⏱️ 目前瀏覽：【預賽完賽成績公告 (含●晉級)】",
-    "finals-roster": "📜 目前瀏覽：【決賽分組參賽名冊】",
-    "finals-score": "🏆 目前瀏覽：【決賽完賽成績公告 (含圈圈名次)】"
-  };
-  if (infoText) infoText.innerText = titleMap[current] || "";
-}
-
 function renderPublicNoticeView() {
-  syncPublicNoticePillUI();
   const container = document.getElementById("publicNoticeViewContainer");
   if (!container) return;
 
-  const type = state.activePublicNotice || "finals-roster";
+  const type = state.activePublicNotice || "prelim-roster";
 
   if (type === "prelim-roster") {
     const hasSeeded = state.seededGroups && state.seededGroups.length > 0;
@@ -1501,8 +1477,8 @@ function renderPublicNoticeView() {
       container.innerHTML = `
         <div class="empty-state no-print" style="background:#fff; padding:3.5rem 1.5rem; border-radius:8px; border:1px solid #e2e8f0; text-align:center;">
           <div style="font-size:2.8rem; margin-bottom:0.6rem;">🔒</div>
-          <h3 style="color:#1e3a8a; margin-bottom:0.4rem;">大會尚未正式公告預賽分組參賽名冊（或已撤回）</h3>
-          <p class="text-muted">預賽賽程已告一段落，目前大會已公告決賽名單，請點選上方【📜 決賽分組參賽名冊】查閱。</p>
+          <h3 style="color:#1e3a8a; margin-bottom:0.4rem;">大會尚未正式公告預賽分組參賽名冊</h3>
+          <p class="text-muted">體育組長賽程智慧編排與校對作業進行中（或公告已暫時撤回），待大會於後台正式點擊「公告」後將即時公開供全校查閱列印。</p>
         </div>
       `;
     }
@@ -2647,23 +2623,18 @@ async function loadPrelimResultsFromCloud(showNotify = false) {
           state.finalists = state.activeSeededGroup.finalists;
         }
 
-        state.published.finalsRoster = true;
-        state.published.prelimRoster = false;
-
         saveSeedingToLocalStorage();
         renderPrelimScoreInput();
         renderPrelimScoreNoticePaper();
         renderFinalsRosterNoticePaper();
         renderFinalsScoreInput();
-        updatePublishControlUI();
-        renderPublicNoticeView();
         const prelimSection = document.getElementById("prelimScoreNoticeSection");
         if (prelimSection) prelimSection.style.display = "block";
         const btnSavePrelim = document.getElementById("btnSavePrelimResultsCloud");
         if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
 
         if (showNotify) {
-          showStatus(`✅ 成功從雲端同步 ${matchedCount} 筆預賽成績與決賽名冊！`, "success");
+          showStatus(`✅ 成功從雲端同步 ${matchedCount} 筆預賽成績與晉級資料！`, "success");
         }
         return true;
       }
