@@ -558,7 +558,7 @@ function generateFinalsHtmlDoc(dataMap, includeScores = false) {
   const compDate = (typeof getDefaultCompDate === "function" ? getDefaultCompDate() : "115.11.11");
   const anniversary = (typeof getAnniversary === "function" ? getAnniversary() : "71");
   const finalsLanes = [6, 5, 4, 3, 2, 1];
-  const colorMap = { 6: "紫", 5: "橘", 4: "黃", 3: "藍", 2: "綠", 1: "紅" };
+  const colorMap = { 6: "綠", 5: "橘", 4: "紫", 3: "黃", 2: "藍", 1: "紅" };
 
   let html = `
   <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -784,6 +784,7 @@ async function downloadStage3FinalsRosterWord() {
     }
 
     const finalsLaneColMap = { 6: 1, 5: 2, 4: 3, 3: 4, 2: 5, 1: 6 };
+    const finalsLaneColorMap = { 6: "綠", 5: "橘", 4: "紫", 3: "黃", 2: "藍", 1: "紅" };
     let blob, filename;
 
     try {
@@ -795,11 +796,15 @@ async function downloadStage3FinalsRosterWord() {
           const rows = tbl.getElementsByTagNameNS(ns, "tr");
           if (rows.length < 3) return;
 
+          const row0Cells = rows[0].getElementsByTagNameNS(ns, "tc");
           const row1Cells = rows[1].getElementsByTagNameNS(ns, "tc");
           const row2Cells = rows[2].getElementsByTagNameNS(ns, "tc");
 
           for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
             const laneNum = parseInt(laneStr, 10);
+            if (row0Cells[colIdx]) {
+              setXmlCellText(row0Cells[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
+            }
             const key = `${evName}_${laneNum}`;
             const item = dataMap.get(key);
 
@@ -844,6 +849,7 @@ async function downloadStage4FinalsResultsWord() {
     }
 
     const finalsLaneColMap = { 6: 1, 5: 2, 4: 3, 3: 4, 2: 5, 1: 6 };
+    const finalsLaneColorMap = { 6: "綠", 5: "橘", 4: "紫", 3: "黃", 2: "藍", 1: "紅" };
     let blob, filename;
 
     try {
@@ -855,11 +861,15 @@ async function downloadStage4FinalsResultsWord() {
           const rows = tbl.getElementsByTagNameNS(ns, "tr");
           if (rows.length < 3) return;
 
+          const row0Cells = rows[0].getElementsByTagNameNS(ns, "tc");
           const row1Cells = rows[1].getElementsByTagNameNS(ns, "tc");
           const row2Cells = rows[2].getElementsByTagNameNS(ns, "tc");
 
           for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
             const laneNum = parseInt(laneStr, 10);
+            if (row0Cells[colIdx]) {
+              setXmlCellText(row0Cells[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
+            }
             const key = `${evName}_${laneNum}`;
             const item = dataMap.get(key);
 
@@ -1061,6 +1071,7 @@ async function downloadAllCompetitionDocsZip() {
 
     // 3. 階段 3 & 4
     if (finalsMap.size > 0) {
+      const finalsLaneColorMap = { 6: "綠", 5: "橘", 4: "紫", 3: "黃", 2: "藍", 1: "紅" };
       try {
         const b3 = await processDocxTemplate("templates/115校慶(71周年)運動競賽決賽名單.docx", (xmlDoc, ns) => {
           const tables = xmlDoc.getElementsByTagNameNS(ns, "tbl");
@@ -1068,9 +1079,14 @@ async function downloadAllCompetitionDocsZip() {
             if (evIdx >= tables.length) return;
             const rows = tables[evIdx].getElementsByTagNameNS(ns, "tr");
             if (rows.length < 3) return;
+            const r0 = rows[0].getElementsByTagNameNS(ns, "tc");
             const r1 = rows[1].getElementsByTagNameNS(ns, "tc");
             const r2 = rows[2].getElementsByTagNameNS(ns, "tc");
             for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
+              const laneNum = parseInt(laneStr, 10);
+              if (r0[colIdx]) {
+                setXmlCellText(r0[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
+              }
               const item = finalsMap.get(`${evName}_${laneStr}`);
               setXmlCellText(r1[colIdx], item && item.name ? `${item.className} ${item.name}` : "", false, 26);
               setXmlCellText(r2[colIdx], "", false, 26);
@@ -1089,9 +1105,14 @@ async function downloadAllCompetitionDocsZip() {
             if (evIdx >= tables.length) return;
             const rows = tables[evIdx].getElementsByTagNameNS(ns, "tr");
             if (rows.length < 3) return;
+            const r0 = rows[0].getElementsByTagNameNS(ns, "tc");
             const r1 = rows[1].getElementsByTagNameNS(ns, "tc");
             const r2 = rows[2].getElementsByTagNameNS(ns, "tc");
             for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
+              const laneNum = parseInt(laneStr, 10);
+              if (r0[colIdx]) {
+                setXmlCellText(r0[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
+              }
               const item = finalsMap.get(`${evName}_${laneStr}`);
               setXmlCellText(r1[colIdx], item && item.name ? `${item.className} ${item.name}` : "", false, 26);
               setXmlCellText(r2[colIdx], item && item.finalScore ? item.finalScore : "", true, 26);
