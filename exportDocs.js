@@ -616,7 +616,16 @@ function generateFinalsHtmlDoc(dataMap, includeScores = false) {
             <th>成 績</th>
             ${finalsLanes.map(l => {
               const item = dataMap.get(`${evName}_${l}`);
-              return `<td style="font-weight: bold;">${includeScores && item && item.finalScore ? item.finalScore : ""}</td>`;
+              let s = (includeScores && item && item.finalScore) ? String(item.finalScore).trim() : "";
+              if (s && s !== "未出賽" && s !== "未完賽") {
+                const circleRankChars = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+                const rankNum = item.finalRank && item.finalRank <= 10 ? item.finalRank : null;
+                const circlePrefix = rankNum ? (circleRankChars[rankNum] || "") : "";
+                if (circlePrefix && !s.startsWith(circlePrefix)) {
+                  s = `${circlePrefix}${s}`;
+                }
+              }
+              return `<td style="font-weight: bold;">${s}</td>`;
             }).join("")}
           </tr>
         </table>
@@ -865,23 +874,57 @@ async function downloadStage4FinalsResultsWord() {
           const row1Cells = rows[1].getElementsByTagNameNS(ns, "tc");
           const row2Cells = rows[2].getElementsByTagNameNS(ns, "tc");
 
+          // 收集該項目 6 個跑道資料並排定名次
+          const eventLanes = [];
           for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
             const laneNum = parseInt(laneStr, 10);
+            const key = `${evName}_${laneNum}`;
+            const item = dataMap.get(key);
+            eventLanes.push({ laneNum, colIdx, item });
+          }
+
+          // 對具有數值成績的選手排定名次（若尚未排定 finalRank）
+          const circleRankChars = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+          const numericLanes = eventLanes.filter(x => {
+            if (!x.item || !x.item.name) return false;
+            const s = x.item.finalScore;
+            return s && s !== "未出賽" && s !== "未完賽" && !isNaN(parseFloat(s)) && parseFloat(s) > 0;
+          });
+          numericLanes.sort((a, b) => parseFloat(a.item.finalScore) - parseFloat(b.item.finalScore));
+
+          let currentRank = 1;
+          numericLanes.forEach((x, idx) => {
+            if (idx > 0 && parseFloat(x.item.finalScore) > parseFloat(numericLanes[idx - 1].item.finalScore)) {
+              currentRank = idx + 1;
+            }
+            if (!x.item.finalRank || x.item.finalRank === 99) {
+              x.item.finalRank = currentRank;
+            }
+          });
+
+          eventLanes.forEach(({ laneNum, colIdx, item }) => {
             if (row0Cells[colIdx]) {
               setXmlCellText(row0Cells[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
             }
-            const key = `${evName}_${laneNum}`;
-            const item = dataMap.get(key);
 
             if (item && item.name) {
               const displayName = `${item.className} ${item.name}`.trim();
               setXmlCellText(row1Cells[colIdx], displayName, false, 26);
-              setXmlCellText(row2Cells[colIdx], item.finalScore || "", true, 26);
+
+              let displayScore = item.finalScore ? String(item.finalScore).trim() : "";
+              if (displayScore && displayScore !== "未出賽" && displayScore !== "未完賽") {
+                const rankNum = item.finalRank && item.finalRank <= 10 ? item.finalRank : null;
+                const circlePrefix = rankNum ? (circleRankChars[rankNum] || "") : "";
+                if (circlePrefix && !displayScore.startsWith(circlePrefix)) {
+                  displayScore = `${circlePrefix}${displayScore}`;
+                }
+              }
+              setXmlCellText(row2Cells[colIdx], displayScore, true, 26);
             } else {
               setXmlCellText(row1Cells[colIdx], "", false, 26);
               setXmlCellText(row2Cells[colIdx], "", false, 26);
             }
-          }
+          });
         });
         updateDocxParagraphDates(xmlDoc, ns, "finals");
       });
@@ -1108,15 +1151,46 @@ async function downloadAllCompetitionDocsZip() {
             const r0 = rows[0].getElementsByTagNameNS(ns, "tc");
             const r1 = rows[1].getElementsByTagNameNS(ns, "tc");
             const r2 = rows[2].getElementsByTagNameNS(ns, "tc");
+            const eventLanes = [];
             for (const [laneStr, colIdx] of Object.entries(finalsLaneColMap)) {
               const laneNum = parseInt(laneStr, 10);
+              const item = finalsMap.get(`${evName}_${laneStr}`);
+              eventLanes.push({ laneNum, colIdx, item });
+            }
+
+            const circleRankChars = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+            const numericLanes = eventLanes.filter(x => {
+              if (!x.item || !x.item.name) return false;
+              const s = x.item.finalScore;
+              return s && s !== "未出賽" && s !== "未完賽" && !isNaN(parseFloat(s)) && parseFloat(s) > 0;
+            });
+            numericLanes.sort((a, b) => parseFloat(a.item.finalScore) - parseFloat(b.item.finalScore));
+            let currentRank = 1;
+            numericLanes.forEach((x, idx) => {
+              if (idx > 0 && parseFloat(x.item.finalScore) > parseFloat(numericLanes[idx - 1].item.finalScore)) {
+                currentRank = idx + 1;
+              }
+              if (!x.item.finalRank || x.item.finalRank === 99) {
+                x.item.finalRank = currentRank;
+              }
+            });
+
+            eventLanes.forEach(({ laneNum, colIdx, item }) => {
               if (r0[colIdx]) {
                 setXmlCellText(r0[colIdx], `第${laneNum}道${finalsLaneColorMap[laneNum]}`, true, 28);
               }
-              const item = finalsMap.get(`${evName}_${laneStr}`);
               setXmlCellText(r1[colIdx], item && item.name ? `${item.className} ${item.name}` : "", false, 26);
-              setXmlCellText(r2[colIdx], item && item.finalScore ? item.finalScore : "", true, 26);
-            }
+
+              let displayScore = item && item.finalScore ? String(item.finalScore).trim() : "";
+              if (displayScore && displayScore !== "未出賽" && displayScore !== "未完賽") {
+                const rankNum = item.finalRank && item.finalRank <= 10 ? item.finalRank : null;
+                const circlePrefix = rankNum ? (circleRankChars[rankNum] || "") : "";
+                if (circlePrefix && !displayScore.startsWith(circlePrefix)) {
+                  displayScore = `${circlePrefix}${displayScore}`;
+                }
+              }
+              setXmlCellText(r2[colIdx], displayScore, true, 26);
+            });
           });
         });
         folder.file("115校慶(71周年)運動競賽決賽名單_含決賽成績.docx", b4);
