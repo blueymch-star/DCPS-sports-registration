@@ -192,6 +192,10 @@ function initTabs() {
           renderPublicNoticeView();
         } else if (btn.dataset.tab === "tab-admin-finals") {
           renderFinalsScoreInput();
+          const hasScores = state.seededGroups && state.seededGroups.some(g => g.finalists && g.finalists.some(f => typeof f.finalScore === "number"));
+          if (!hasScores) {
+            loadFinalResultsFromCloud(false).catch(() => {});
+          }
         }
       }
     });
@@ -978,8 +982,14 @@ function restoreSeedingFromLocalStorage() {
           renderFinalsRosterNoticePaper();
           renderFinalsScoreInput();
         }
-        if (state.published.finalsScore) {
+        if (state.seededGroups.some(g => g.finalsCompleted) || state.published.finalsScore) {
+          const finalsSec = document.getElementById("finalsScoreNoticeSection");
+          if (finalsSec) finalsSec.style.display = "block";
+          const printBtn = document.getElementById("btnPrintFinalsScoreNotice");
+          if (printBtn) printBtn.style.display = "inline-flex";
           renderFinalsScoreNoticePaper();
+          renderFinalsScoreInput();
+          renderFinalsResultSummaryTable(state.seededGroups.filter(g => g.finalists && g.finalists.length > 0));
         }
         updatePublishControlUI();
         renderPublicNoticeView();
@@ -1080,11 +1090,15 @@ async function loadSeedingFromCloud(showNotify = false) {
           return h;
         });
 
+        const existingGrp = (state.seededGroups || []).find(sg => sg.title === grp.title);
         reconstructedGroups.push({
           title: grp.title,
           event: grp.event,
           category: grp.category,
-          heats: heats
+          heats: heats,
+          scoresCompleted: existingGrp ? existingGrp.scoresCompleted : false,
+          finalsCompleted: existingGrp ? existingGrp.finalsCompleted : false,
+          finalists: existingGrp && existingGrp.finalists ? existingGrp.finalists : []
         });
       });
 
@@ -1117,8 +1131,10 @@ async function loadSeedingFromCloud(showNotify = false) {
           if (btnSavePrelim) btnSavePrelim.style.display = "inline-flex";
         }
 
-        // 嘗試自雲端載入預賽成績與晉級
-        loadPrelimResultsFromCloud(false).catch(() => {});
+        // 依序自雲端載入預賽成績與決賽成績
+        loadPrelimResultsFromCloud(false).then(() => {
+          loadFinalResultsFromCloud(false).catch(() => {});
+        }).catch(() => {});
 
         if (showNotify) {
           showStatus(`✅ 成功從雲端同步 ${state.seededGroups.length} 個項目的預賽分組名冊！`, "success");
@@ -2607,17 +2623,38 @@ async function loadPrelimResultsFromCloud(showNotify = false) {
       });
 
       if (matchedCount > 0) {
-        // 重新判定晉級與決賽 6 強
+        // 重新判定晉級與決賽 6 強（保留既有已輸入之決賽成績與名次）
         state.seededGroups.forEach(group => {
           if (group.scoresCompleted) {
+            const existingFinalistMap = new Map();
+            if (group.finalists) {
+              group.finalists.forEach(f => {
+                if (f.athlete && f.athlete.name) {
+                  existingFinalistMap.set(f.athlete.name, f);
+                }
+              });
+            }
+
             const q = calculateQualifiersForGroup(group);
             const qa = q.filter(r => r.qualified && typeof r.prelimScore === "number")
                         .sort((a, b) => a.prelimScore - b.prelimScore);
-            group.finalists = qa.map((item, idx) => ({
-              ...item,
-              finalLane: FINALS_LANE_PRIORITY_6[idx],
-              seedPriority: idx + 1
-            })).sort((a, b) => a.finalLane - b.finalLane);
+            group.finalists = qa.map((item, idx) => {
+              const prev = existingFinalistMap.get(item.athlete.name);
+              return {
+                ...item,
+                finalLane: FINALS_LANE_PRIORITY_6[idx],
+                seedPriority: idx + 1,
+                finalScore: (prev && prev.finalScore !== undefined) ? prev.finalScore : item.finalScore,
+                finalRank: (prev && prev.finalRank !== undefined) ? prev.finalRank : item.finalRank,
+                awardText: (prev && prev.awardText !== undefined) ? prev.awardText : item.awardText,
+                isFinalsDNS: (prev && prev.isFinalsDNS !== undefined) ? prev.isFinalsDNS : item.isFinalsDNS,
+                isFinalsDNF: (prev && prev.isFinalsDNF !== undefined) ? prev.isFinalsDNF : item.isFinalsDNF
+              };
+            }).sort((a, b) => a.finalLane - b.finalLane);
+
+            if (existingFinalistMap.size > 0 && Array.from(existingFinalistMap.values()).some(f => f.finalScore !== undefined && f.finalScore !== "未出賽")) {
+              group.finalsCompleted = true;
+            }
           }
         });
 
@@ -2646,6 +2683,107 @@ async function loadPrelimResultsFromCloud(showNotify = false) {
   }
   return false;
 }
+
+
+
+/**
+ * 從 Google 試算表「決賽成績總榜」載入並還原決賽完賽成績與名次
+ */
+async function loadFinalResultsFromCloud(showNotify = false) {
+  try {
+    if (!CONFIG || !CONFIG.GAS_API_URL) return false;
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getFinalResults`);
+    const json = await res.json();
+    if (json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
+      if (!state.seededGroups || state.seededGroups.length === 0) return false;
+
+      let matchedCount = 0;
+      json.data.forEach(item => {
+        const itemEvent = String(item.event || "").replace(/\s+/g, "").trim();
+        const itemLane = parseInt(String(item.lane || "").replace(/\D/g, ""), 10);
+        const itemName = (item.name || "").trim();
+        const itemScore = item.finalScore;
+
+        state.seededGroups.forEach(group => {
+          const grpTitle = String(group.title || "").replace(/\s+/g, "").trim();
+          if (grpTitle === itemEvent && group.finalists) {
+            group.finalists.forEach(f => {
+              const fName = (f.athlete && f.athlete.name) ? f.athlete.name.trim() : "";
+              if (f.finalLane === itemLane && fName === itemName) {
+                if (itemScore === "未完賽" || itemScore === "DNF") {
+                  f.finalScore = "未完賽";
+                  f.isFinalsDNF = true;
+                  f.isFinalsDNS = false;
+                  f.finalRank = 99;
+                  f.awardText = "未完賽";
+                } else if (itemScore === "未出賽" || itemScore === "DNS" || itemScore === "棄權") {
+                  f.finalScore = "未出賽";
+                  f.isFinalsDNS = true;
+                  f.isFinalsDNF = false;
+                  f.finalRank = 99;
+                  f.awardText = "未出賽";
+                } else if (itemScore !== undefined && itemScore !== null && String(itemScore).trim() !== "") {
+                  const numVal = parseFloat(String(itemScore).replace(/[^\d.]/g, ""));
+                  f.finalScore = (!isNaN(numVal) && numVal > 0) ? numVal : itemScore;
+                  f.isFinalsDNS = false;
+                  f.isFinalsDNF = false;
+                  if (item.finalRank) {
+                    const m = String(item.finalRank).match(/\d+/);
+                    f.finalRank = m ? parseInt(m[0], 10) : null;
+                  }
+                  if (item.award) f.awardText = item.award;
+                }
+                matchedCount++;
+                group.finalsCompleted = true;
+              }
+            });
+          }
+        });
+      });
+
+      // 針對已有完賽秒數的項目排定名次與獎牌文字
+      state.seededGroups.forEach((group) => {
+        if (group.finalists && group.finalsCompleted) {
+          const activeFinalists = group.finalists.filter(x => !x.isFinalsDNS && !x.isFinalsDNF && typeof x.finalScore === "number");
+          activeFinalists.sort((a, b) => a.finalScore - b.finalScore);
+          const awardLabels = [
+            "🥇 金牌 (第1名)",
+            "🥈 銀牌 (第2名)",
+            "🥉 銅牌 (第3名)",
+            "第 4 名",
+            "第 5 名",
+            "第 6 名"
+          ];
+          activeFinalists.forEach((item, idx) => {
+            item.finalRank = idx + 1;
+            item.awardText = awardLabels[idx] || `第 ${idx + 1} 名`;
+          });
+        }
+      });
+
+      if (matchedCount > 0) {
+        saveSeedingToLocalStorage();
+        renderFinalsScoreInput();
+        renderFinalsScoreNoticePaper();
+        renderFinalsResultSummaryTable(state.seededGroups.filter(g => g.finalists && g.finalists.length > 0));
+        renderPublicNoticeView();
+        const finalsNoticeSection = document.getElementById("finalsScoreNoticeSection");
+        if (finalsNoticeSection) finalsNoticeSection.style.display = "block";
+        const printBtn = document.getElementById("btnPrintFinalsScoreNotice");
+        if (printBtn) printBtn.style.display = "inline-flex";
+
+        if (showNotify) {
+          showStatus(`✅ 成功從雲端同步 ${matchedCount} 筆決賽成績！`, "success");
+        }
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("自動從雲端獲取決賽成績失敗：", err);
+  }
+  return false;
+}
+window.loadFinalResultsFromCloud = loadFinalResultsFromCloud;
 
 function initPrelimScoringEvents() {
   document.getElementById("btnCalculateQualifiers").addEventListener("click", calculateQualifiers);
@@ -2874,14 +3012,35 @@ function calculateQualifiers() {
   // 4. 更新所有組別的決賽 6 強名冊
   state.seededGroups.forEach(group => {
     if (group === state.activeSeededGroup || group.scoresCompleted) {
+      const existingFinalistMap = new Map();
+      if (group.finalists) {
+        group.finalists.forEach(f => {
+          if (f.athlete && f.athlete.name) {
+            existingFinalistMap.set(f.athlete.name, f);
+          }
+        });
+      }
+
       const q = calculateQualifiersForGroup(group);
       const qa = q.filter(r => r.qualified && typeof r.prelimScore === "number")
                   .sort((a, b) => a.prelimScore - b.prelimScore);
-      group.finalists = qa.map((item, idx) => ({
-        ...item,
-        finalLane: FINALS_LANE_PRIORITY_6[idx],
-        seedPriority: idx + 1
-      })).sort((a, b) => a.finalLane - b.finalLane);
+      group.finalists = qa.map((item, idx) => {
+        const prev = existingFinalistMap.get(item.athlete.name);
+        return {
+          ...item,
+          finalLane: FINALS_LANE_PRIORITY_6[idx],
+          seedPriority: idx + 1,
+          finalScore: (prev && prev.finalScore !== undefined) ? prev.finalScore : item.finalScore,
+          finalRank: (prev && prev.finalRank !== undefined) ? prev.finalRank : item.finalRank,
+          awardText: (prev && prev.awardText !== undefined) ? prev.awardText : item.awardText,
+          isFinalsDNS: (prev && prev.isFinalsDNS !== undefined) ? prev.isFinalsDNS : item.isFinalsDNS,
+          isFinalsDNF: (prev && prev.isFinalsDNF !== undefined) ? prev.isFinalsDNF : item.isFinalsDNF
+        };
+      }).sort((a, b) => a.finalLane - b.finalLane);
+
+      if (existingFinalistMap.size > 0 && Array.from(existingFinalistMap.values()).some(f => f.finalScore !== undefined && f.finalScore !== "未出賽")) {
+        group.finalsCompleted = true;
+      }
     }
   });
 
@@ -3202,6 +3361,36 @@ function renderFinalsScoreNoticePaper() {
   renderPublicNoticeView();
 }
 
+function handleFinalScoreInputChange(gIdx, laneNum, val) {
+  const groupsWithFinalists = (state.seededGroups || []).filter(g => g.finalists && g.finalists.length > 0);
+  const group = groupsWithFinalists[gIdx];
+  if (!group || !group.finalists) return;
+  const f = group.finalists.find(x => x.finalLane === laneNum);
+  if (!f) return;
+
+  const raw = String(val || "").trim();
+  if (raw === "" || raw === "未出賽") {
+    f.finalScore = "未出賽";
+    f.isFinalsDNS = true;
+    f.isFinalsDNF = false;
+  } else if (raw === "未完賽" || raw === "DNF") {
+    f.finalScore = "未完賽";
+    f.isFinalsDNF = true;
+    f.isFinalsDNS = false;
+  } else {
+    const num = parseFloat(raw);
+    if (!isNaN(num) && num > 0) {
+      f.finalScore = num;
+      f.isFinalsDNS = false;
+      f.isFinalsDNF = false;
+    } else {
+      f.finalScore = raw;
+    }
+  }
+  saveSeedingToLocalStorage();
+}
+window.handleFinalScoreInputChange = handleFinalScoreInputChange;
+
 function renderFinalsScoreInput() {
   const area = document.getElementById("finalsScoreInputArea");
   if (!area) return;
@@ -3269,6 +3458,7 @@ function renderFinalsScoreInput() {
                            value="${escapeHtml(String(scoreVal))}"
                            onfocus="if(this.value==='未出賽'||this.value==='未完賽') this.select();"
                            onblur="if(this.value.trim()==='') this.value='未出賽';"
+                           onchange="handleFinalScoreInputChange(${gIdx}, ${f.finalLane}, this.value)"
                            style="width: 160px; font-weight: 700; padding: 0.4rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 4px;">
                   </td>
                   <td id="final_rank_display_${gIdx}_${f.finalLane}">
@@ -3576,6 +3766,9 @@ async function exportFinalsToCloud() {
 // 4. 決賽事件綁定
 // ==========================================
 function initFinalsEvents() {
+  const loadFinalsBtn = document.getElementById("btnLoadFinalsCloud");
+  if (loadFinalsBtn) loadFinalsBtn.addEventListener("click", () => loadFinalResultsFromCloud(true));
+
   const calcBtn = document.getElementById("btnCalculateFinalsRanks");
   if (calcBtn) calcBtn.addEventListener("click", calculateFinalResults);
 
