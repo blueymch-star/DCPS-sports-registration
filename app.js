@@ -190,6 +190,8 @@ function initTabs() {
           renderPublicRegistrationTable();
         } else if (btn.dataset.tab === "tab-public-notices") {
           renderPublicNoticeView();
+        } else if (btn.dataset.tab === "tab-admin-finals") {
+          renderFinalsScoreInput();
         }
       }
     });
@@ -3174,6 +3176,9 @@ function renderFinalsScoreNoticePaper() {
                     if (!f || f.finalScore === undefined || f.finalScore === null || f.finalScore === "") {
                       return `<td class="score-cell">&nbsp;</td>`;
                     }
+                    if (f.finalScore === "未完賽" || f.isFinalsDNF) {
+                      return `<td class="score-cell"><span class="text-danger" style="color:#dc2626; font-weight:700;">未完賽</span></td>`;
+                    }
                     if (f.finalScore === "未出賽" || f.isFinalsDNS) {
                       return `<td class="score-cell"><span class="text-muted">未出賽</span></td>`;
                     }
@@ -3207,6 +3212,16 @@ function renderFinalsScoreInput() {
     return;
   }
 
+  // 預先為尚未填寫成績的決賽選手自動登錄為「未出賽」
+  groupsWithFinalists.forEach(group => {
+    (group.finalists || []).forEach(f => {
+      if (f.finalScore === undefined || f.finalScore === null || f.finalScore === "") {
+        f.finalScore = "未出賽";
+        f.isFinalsDNS = true;
+      }
+    });
+  });
+
   let html = groupsWithFinalists.map((group, gIdx) => `
     <div class="card mb-4" style="border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 1.5rem; background: #ffffff;">
       <div class="card-header" style="background:#f8fafc; padding: 0.8rem 1.25rem; font-weight: 700; color: #1e3a8a; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
@@ -3227,7 +3242,20 @@ function renderFinalsScoreInput() {
               </tr>
             </thead>
             <tbody>
-              ${group.finalists.map(f => `
+              ${group.finalists.map(f => {
+                const scoreVal = (f.finalScore !== undefined && f.finalScore !== null && f.finalScore !== "") ? f.finalScore : "未出賽";
+                const isDNF = f.isFinalsDNF || scoreVal === "未完賽";
+                const isDNS = f.isFinalsDNS || scoreVal === "未出賽";
+                let rankBadge = '-';
+                if (f.finalRank && f.finalRank !== 99) {
+                  rankBadge = `<span class="rank-circle">${f.finalRank}</span> <strong>第 ${f.finalRank} 名</strong>`;
+                } else if (isDNF) {
+                  rankBadge = '<span class="text-danger" style="color:#dc2626; font-weight:700;">未完賽</span>';
+                } else if (isDNS) {
+                  rankBadge = '<span class="text-muted">未出賽</span>';
+                }
+
+                return `
                 <tr>
                   <td><span class="lane-chip ${f.finalLane === 4 ? 'favored' : (f.finalLane === 5 ? 'favored-2' : '')}">${f.finalLane} 道</span></td>
                   <td><strong>${escapeHtml(f.athlete.className)}</strong></td>
@@ -3238,14 +3266,17 @@ function renderFinalsScoreInput() {
                            id="final_score_${gIdx}_${f.finalLane}"
                            class="final-score-input"
                            placeholder="秒數或未出賽"
-                           value="${f.finalScore !== undefined ? f.finalScore : ''}"
+                           value="${escapeHtml(String(scoreVal))}"
+                           onfocus="if(this.value==='未出賽'||this.value==='未完賽') this.select();"
+                           onblur="if(this.value.trim()==='') this.value='未出賽';"
                            style="width: 160px; font-weight: 700; padding: 0.4rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 4px;">
                   </td>
                   <td id="final_rank_display_${gIdx}_${f.finalLane}">
-                    ${f.finalRank && f.finalRank !== 99 ? `<span class="rank-circle">${f.finalRank}</span> <strong>第 ${f.finalRank} 名</strong>` : (f.isFinalsDNS ? '<span class="text-muted">未出賽</span>' : '-')}
+                    ${rankBadge}
                   </td>
                 </tr>
-              `).join("")}
+                `;
+              }).join("")}
             </tbody>
           </table>
         </div>
@@ -3263,27 +3294,38 @@ function calculateFinalResults() {
     return;
   }
 
-  // 1. 驗證並收集每一組的決賽秒數
+  // 1. 收集並判定各組選手決賽成績（未輸入者自動登入為「未出賽」，不用全部成績登入即可計算名次）
   for (let gIdx = 0; gIdx < groupsWithFinalists.length; gIdx++) {
     const group = groupsWithFinalists[gIdx];
     for (let f of group.finalists) {
       const inputEl = document.getElementById(`final_score_${gIdx}_${f.finalLane}`);
-      if (!inputEl) continue;
-      const rawVal = inputEl.value.trim();
-      const isDNS = rawVal === "未出賽" || rawVal === "DNS" || rawVal === "棄權";
+      const rawVal = inputEl ? inputEl.value.trim() : (f.finalScore !== undefined ? String(f.finalScore).trim() : "未出賽");
+
+      const isDNF = rawVal === "未完賽" || rawVal === "DNF";
+      const isDNS = rawVal === "" || rawVal === "未出賽" || rawVal === "DNS" || rawVal === "棄權";
       const val = parseFloat(rawVal);
 
-      if (!isDNS && (rawVal === "" || isNaN(val) || val <= 0)) {
-        alert(`請先為「${group.title} ${f.finalLane} 道 ${f.athlete.name}」輸入決賽完賽秒數或填寫『未出賽』！`);
-        inputEl.focus();
-        return;
+      if (isDNF) {
+        f.isFinalsDNF = true;
+        f.isFinalsDNS = false;
+        f.finalScore = "未完賽";
+        if (inputEl) inputEl.value = "未完賽";
+      } else if (isDNS || isNaN(val) || val <= 0) {
+        // 未輸入或填未出賽或非有效秒數，自動視為未出賽
+        f.isFinalsDNS = true;
+        f.isFinalsDNF = false;
+        f.finalScore = "未出賽";
+        if (inputEl) inputEl.value = "未出賽";
+      } else {
+        f.isFinalsDNS = false;
+        f.isFinalsDNF = false;
+        f.finalScore = val;
+        if (inputEl) inputEl.value = val.toFixed(2);
       }
-      f.isFinalsDNS = isDNS;
-      f.finalScore = isDNS ? "未出賽" : val;
     }
 
-    // 依決賽秒數排序 (取消積分制度，純名次排序)
-    const activeFinalists = group.finalists.filter(x => !x.isFinalsDNS && typeof x.finalScore === "number");
+    // 依決賽秒數排序 (取消積分制度，純名次排序：僅排序有有效秒數的完賽選手)
+    const activeFinalists = group.finalists.filter(x => !x.isFinalsDNS && !x.isFinalsDNF && typeof x.finalScore === "number");
     activeFinalists.sort((a, b) => a.finalScore - b.finalScore);
 
     const awardLabels = [
@@ -3304,13 +3346,21 @@ function calculateFinalResults() {
       }
     });
 
-    // 缺賽選手
-    group.finalists.filter(x => x.isFinalsDNS || typeof x.finalScore !== "number").forEach(item => {
+    // 缺賽及未完賽選手
+    group.finalists.filter(x => x.isFinalsDNS || x.isFinalsDNF || typeof x.finalScore !== "number").forEach(item => {
       item.finalRank = 99;
-      item.awardText = "未出賽";
-      const displayEl = document.getElementById(`final_rank_display_${gIdx}_${item.finalLane}`);
-      if (displayEl) {
-        displayEl.innerHTML = `<span class="text-muted">未出賽</span>`;
+      if (item.isFinalsDNF || item.finalScore === "未完賽") {
+        item.awardText = "未完賽";
+        const displayEl = document.getElementById(`final_rank_display_${gIdx}_${item.finalLane}`);
+        if (displayEl) {
+          displayEl.innerHTML = `<span class="text-danger" style="color:#dc2626; font-weight:700;">未完賽</span>`;
+        }
+      } else {
+        item.awardText = "未出賽";
+        const displayEl = document.getElementById(`final_rank_display_${gIdx}_${item.finalLane}`);
+        if (displayEl) {
+          displayEl.innerHTML = `<span class="text-muted">未出賽</span>`;
+        }
       }
     });
 
@@ -3331,7 +3381,7 @@ function calculateFinalResults() {
   // 4. 產出螢幕決賽名次總覽表
   renderFinalsResultSummaryTable(groupsWithFinalists);
 
-  showStatus("🎉 決賽名次計算完成！已依照官方格式產出決賽成績公告。請校對無誤後點擊「📢 公告決賽成績公告至前台」！", "success");
+  showStatus("🎉 決賽名次計算完成！已依照官方格式產出決賽成績公告（尚未輸入成績者自動登錄為未出賽）。請校對無誤後點擊「📢 公告決賽成績公告至前台」！", "success");
 }
 
 function renderFinalsResultSummaryTable(groups) {
@@ -3354,7 +3404,7 @@ function renderFinalsResultSummaryTable(groups) {
 
   tbody.innerHTML = allRanked.map(item => `
     <tr>
-      <td>${item.finalRank && item.finalRank !== 99 ? `<span class="rank-circle">${item.finalRank}</span> 第 ${item.finalRank} 名` : '<span class="text-muted">未出賽</span>'}</td>
+      <td>${item.finalRank && item.finalRank !== 99 ? `<span class="rank-circle">${item.finalRank}</span> 第 ${item.finalRank} 名` : (item.isFinalsDNF || item.finalScore === "未完賽" ? '<span class="text-danger" style="color:#dc2626; font-weight:700;">未完賽</span>' : '<span class="text-muted">未出賽</span>')}</td>
       <td><span class="lane-chip ${item.finalLane === 4 ? 'favored' : (item.finalLane === 5 ? 'favored-2' : '')}">${item.finalLane} 道</span></td>
       <td><strong>${escapeHtml(item.athlete.className)}</strong></td>
       <td><strong>${escapeHtml(item.athlete.name)}</strong> (${escapeHtml(item.groupTitle)})</td>
@@ -3457,9 +3507,31 @@ async function exportFinalsToCloud() {
               className: f.athlete.className,
               studentNo: f.athlete.studentNo || "",
               name: f.athlete.name,
-              finalScore: f.finalScore,
+              finalScore: typeof f.finalScore === "number" ? f.finalScore.toFixed(2) : f.finalScore,
               finalRank: `第 ${f.finalRank} 名`,
               award: f.awardText || `第 ${f.finalRank} 名`
+            });
+          } else if (f.isFinalsDNF || f.finalScore === "未完賽") {
+            allFinalists.push({
+              event: g.title,
+              lane: `${f.finalLane} 道`,
+              className: f.athlete.className,
+              studentNo: f.athlete.studentNo || "",
+              name: f.athlete.name,
+              finalScore: "未完賽",
+              finalRank: "未完賽",
+              award: "未完賽"
+            });
+          } else if (f.finalScore && f.finalScore !== "") {
+            allFinalists.push({
+              event: g.title,
+              lane: `${f.finalLane} 道`,
+              className: f.athlete.className,
+              studentNo: f.athlete.studentNo || "",
+              name: f.athlete.name,
+              finalScore: "未出賽",
+              finalRank: "未出賽",
+              award: "未出賽"
             });
           }
         });
